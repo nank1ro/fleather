@@ -19,6 +19,7 @@ class EditableTextBlock extends StatelessWidget {
   final bool readOnly;
   final VerticalSpacing spacing;
   final CursorController cursorController;
+  final TextWidthBasis textWidthBasis;
   final TextSelection selection;
   final Color selectionColor;
   final bool enableInteractiveSelection;
@@ -35,6 +36,7 @@ class EditableTextBlock extends StatelessWidget {
     required this.readOnly,
     required this.spacing,
     required this.cursorController,
+    required this.textWidthBasis,
     required this.selection,
     required this.selectionColor,
     required this.enableInteractiveSelection,
@@ -54,6 +56,7 @@ class EditableTextBlock extends StatelessWidget {
       node: node,
       padding: spacing,
       contentPadding: contentPadding,
+      textWidthBasis: textWidthBasis,
       decoration: _getDecorationForBlock(node, theme) ?? const BoxDecoration(),
       children: _buildChildren(context),
     );
@@ -83,6 +86,7 @@ class EditableTextBlock extends StatelessWidget {
             embedBuilder: embedBuilder,
             linkActionPicker: linkActionPicker,
             onLaunchUrl: onLaunchUrl,
+            textWidthBasis: textWidthBasis,
           ),
           cursorController: cursorController,
           selection: selection,
@@ -126,8 +130,10 @@ class EditableTextBlock extends StatelessWidget {
           FleatherThemeData theme, List<Node> children) =>
       children
           .map((_) => _BulletPoint(
-              style:
-                  theme.paragraph.style.copyWith(fontWeight: FontWeight.bold)))
+                style:
+                    theme.paragraph.style.copyWith(fontWeight: FontWeight.bold),
+                strutStyle: theme.strutStyle,
+              ))
           .toList();
 
   List<Widget> _buildNumberPointsForCodeBlock(
@@ -140,6 +146,7 @@ class EditableTextBlock extends StatelessWidget {
                 width: 32.0,
                 padding: 8,
                 withDot: false,
+                strutStyle: theme.strutStyle,
               ))
           .toList();
 
@@ -157,7 +164,8 @@ class EditableTextBlock extends StatelessWidget {
         if (lastLevel == currentLevel) {
           currentIndex = levelsIndexes[lastLevel]! + 1;
         } else if (lastLevel > currentLevel) {
-          currentIndex = levelsIndexes[currentLevel]! + 1;
+          final currentLevelIndex = levelsIndexes[currentLevel];
+          currentIndex = currentLevelIndex == null ? 0 : currentLevelIndex + 1;
         }
       }
 
@@ -166,6 +174,7 @@ class EditableTextBlock extends StatelessWidget {
         style: theme.lists.style,
         width: 32.0,
         padding: 8.0,
+        strutStyle: theme.strutStyle,
       ));
       levelsIndexes[currentLevel] = currentIndex;
       lastLevel = currentLevel;
@@ -265,10 +274,12 @@ class _EditableBlock extends MultiChildRenderObjectWidget {
   final VerticalSpacing padding;
   final Decoration decoration;
   final EdgeInsets? contentPadding;
+  final TextWidthBasis textWidthBasis;
 
   const _EditableBlock({
     required this.node,
     required this.decoration,
+    required this.textWidthBasis,
     required super.children,
     this.contentPadding,
     this.padding = const VerticalSpacing(),
@@ -287,6 +298,7 @@ class _EditableBlock extends MultiChildRenderObjectWidget {
       padding: _padding,
       decoration: decoration,
       contentPadding: _contentPadding,
+      textWidthBasis: textWidthBasis,
     );
   }
 
@@ -298,6 +310,7 @@ class _EditableBlock extends MultiChildRenderObjectWidget {
     renderObject.padding = _padding;
     renderObject.decoration = decoration;
     renderObject.contentPadding = _contentPadding;
+    renderObject.textWidthBasis = textWidthBasis;
   }
 }
 
@@ -307,11 +320,13 @@ class _NumberPoint extends StatelessWidget {
   final bool withDot;
   final double padding;
   final TextStyle style;
+  final StrutStyle? strutStyle;
 
   const _NumberPoint({
     required this.number,
     required this.width,
     required this.style,
+    this.strutStyle,
     this.withDot = true,
     this.padding = 0.0,
   });
@@ -324,16 +339,22 @@ class _NumberPoint extends StatelessWidget {
       alignment: AlignmentDirectional.topEnd,
       width: width,
       padding: EdgeInsetsDirectional.only(end: padding),
-      child: Text(withDot ? '$number.' : '$number', style: style),
+      child: Text(
+        withDot ? '$number.' : '$number',
+        style: style,
+        strutStyle: strutStyle,
+      ),
     );
   }
 }
 
 class _BulletPoint extends StatelessWidget {
   final TextStyle style;
+  final StrutStyle? strutStyle;
 
   const _BulletPoint({
     required this.style,
+    this.strutStyle,
   });
 
   @override
@@ -342,7 +363,11 @@ class _BulletPoint extends StatelessWidget {
       alignment: AlignmentDirectional.topEnd,
       width: 32,
       padding: const EdgeInsetsDirectional.only(end: 13.0),
-      child: Text('•', style: style),
+      child: Text(
+        '•',
+        style: style,
+        strutStyle: strutStyle,
+      ),
     );
   }
 }

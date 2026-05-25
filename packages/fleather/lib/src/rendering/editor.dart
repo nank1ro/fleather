@@ -140,6 +140,7 @@ class RenderEditor extends RenderEditableContainerBox
     super.children,
     required super.padding,
     required super.textDirection,
+    required super.textWidthBasis,
     required ParchmentDocument document,
     required ViewportOffset offset,
     required bool hasFocus,
@@ -592,11 +593,14 @@ class RenderEditor extends RenderEditableContainerBox
     resolvePadding();
     assert(resolvedPadding != null);
 
-    var contentSize = resolvedPadding!.top;
+    var contentHeight = resolvedPadding!.top;
+    var contentWidth = 0.0;
     var child = firstChild;
-    final innerConstraints = BoxConstraints.tightFor(
-            width: math.min(
-                _maxContentWidth ?? double.infinity, constraints.maxWidth))
+    double width =
+        math.min(_maxContentWidth ?? double.infinity, constraints.maxWidth);
+    final innerConstraints = (textWidthBasis == TextWidthBasis.longestLine
+            ? BoxConstraints(maxWidth: width)
+            : BoxConstraints.tightFor(width: width))
         .deflate(resolvedPadding!);
     final leftOffset = _maxContentWidth == null
         ? 0.0
@@ -605,15 +609,16 @@ class RenderEditor extends RenderEditableContainerBox
       child.layout(innerConstraints, parentUsesSize: true);
       final childParentData = child.parentData as EditableContainerParentData;
       childParentData.offset =
-          Offset(resolvedPadding!.left + leftOffset, contentSize);
-      contentSize += child.size.height;
+          Offset(resolvedPadding!.left + leftOffset, contentHeight);
+      contentHeight += child.size.height;
+      contentWidth = math.max(contentWidth, child.size.width);
       assert(child.parentData == childParentData);
       child = childParentData.nextSibling;
     }
-    contentSize += resolvedPadding!.bottom;
+    contentHeight += resolvedPadding!.bottom;
     size = constraints
-        .constrain(Size(_maxContentWidth ?? constraints.maxWidth, contentSize));
-    _maxScrollExtent = math.max(0.0, contentSize - size.height);
+        .constrain(Size(_maxContentWidth ?? contentWidth, contentHeight));
+    _maxScrollExtent = math.max(0.0, contentHeight - size.height);
     offset.applyViewportDimension(size.height);
     offset.applyContentDimensions(0.0, _maxScrollExtent);
 

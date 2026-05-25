@@ -26,6 +26,7 @@ class TextLine extends StatefulWidget {
   final FleatherEmbedBuilder embedBuilder;
   final ValueChanged<String?>? onLaunchUrl;
   final LinkActionPicker linkActionPicker;
+  final TextWidthBasis textWidthBasis;
 
   const TextLine({
     super.key,
@@ -35,6 +36,7 @@ class TextLine extends StatefulWidget {
     required this.embedBuilder,
     required this.onLaunchUrl,
     required this.linkActionPicker,
+    required this.textWidthBasis,
   });
 
   @override
@@ -123,9 +125,14 @@ class _TextLineState extends State<TextLine> {
       final embed = widget.node.children.single as EmbedNode;
       return EmbedProxy(child: widget.embedBuilder(context, embed));
     }
-    final text = buildText(context, widget.node);
+    final theme = FleatherTheme.of(context)!;
+    final text = buildText(context, widget.node, theme);
     final textAlign = getTextAlign(widget.node);
-    final strutStyle = StrutStyle.fromTextStyle(text.style!);
+    final strutStyle = theme.strutStyle?.inheritFromTextStyle(text.style) ??
+        StrutStyle.fromTextStyle(text.style!,
+            // We don't want to force strut height when the line contains inline
+            // embeds
+            forceStrutHeight: !widget.node.hasSpanEmbed);
     return RichTextProxy(
       textStyle: text.style!,
       textAlign: textAlign,
@@ -136,6 +143,7 @@ class _TextLineState extends State<TextLine> {
         text: text,
         textAlign: textAlign,
         strutStyle: strutStyle,
+        textWidthBasis: widget.textWidthBasis,
         textScaler: MediaQuery.textScalerOf(context),
       ),
     );
@@ -153,8 +161,8 @@ class _TextLineState extends State<TextLine> {
     return TextAlign.left;
   }
 
-  TextSpan buildText(BuildContext context, LineNode node) {
-    final theme = FleatherTheme.of(context)!;
+  TextSpan buildText(
+      BuildContext context, LineNode node, FleatherThemeData theme) {
     final children = node.children
         .map((node) => _segmentToTextSpan(node, theme))
         .toList(growable: false);

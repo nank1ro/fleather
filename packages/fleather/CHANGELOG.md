@@ -1,3 +1,30 @@
+##  1.26.0
+
+- Editor and cursor brought into viewport if is wrapped with a scrollable regardless of it's `scrollable` property 
+- [Fix] incorrect width when using TextWidthBasis.longestLine with multiple lines
+- [Fix] exception thrown when editor starts with an element that do not compute distance to actual baseline
+
+##  1.25.1
+
+- [Fix] Empty line height greater than non-empty line height
+
+##  1.25.0
+
+- Upgrade to Flutter 3.35
+- Add attributes to images
+- Support `TextWidthBasis.longestLine`
+- Support custom `StrutStyle`
+- Built-in emoji shortcuts
+- [Fix] Corrupted cursor position when deleting blocks
+- [Fix] Error when using multi-level lists of different nature
+
+## 1.24.0+1
+
+* Use Flutter context menu when read-only on iOS
+* Add translations for Hungarian
+* [Fix] `merge` method not applying horizontal rule theme data
+* [Fix] regex for ul in Markdown decoder
+
 ## 1.23.0
 
 * Use system context menu on iOS

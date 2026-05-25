@@ -336,6 +336,17 @@ mixin RawEditorStateTextInputClientMixin on EditorState
     }
   }
 
+  @override
+  bool onFocusReceived() {
+    // `onFocusReceived` was added to Flutter's `TextInputClient` mixin in a
+    // recent version (present in Flutter 3.44). This class `implements
+    // TextInputClient`, so the mixin's default body is not inherited and the
+    // member must be provided here. Returning `false` matches the framework
+    // default — the platform-initiated refocus path (autofill on some mobile
+    // browsers) is not specially handled by this editor.
+    return false;
+  }
+
   void _updateSizeAndTransform() {
     if (hasConnection) {
       // Asking for renderEditor.size here can cause errors if layout hasn't

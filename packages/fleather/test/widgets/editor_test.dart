@@ -252,24 +252,67 @@ void main() {
       expect(toolbarTop.dy, greaterThan(90));
     });
 
-    testWidgets('allows merging attribute theme data', (tester) async {
-      var delta = Delta()
-        ..insert(
-          'Website',
-          ParchmentAttribute.link.fromString('https://github.com').toJson(),
-        )
-        ..insert('\n');
-      var doc = ParchmentDocument.fromDelta(delta);
-      final BuildContext context = tester.element(find.byType(Container));
-      var theme = FleatherThemeData.fallback(context)
-          .copyWith(link: const TextStyle(color: Colors.red));
-      var editor =
-          EditorSandBox(tester: tester, document: doc, fleatherTheme: theme);
-      await editor.pumpAndTap();
-      // await tester.pumpAndSettle();
-      final p = tester.widget(find.byType(RichText).first) as RichText;
-      final text = p.text as TextSpan;
-      expect(text.children!.first.style!.color, Colors.red);
+    group('FleatherTheme', () {
+      testWidgets('allows merging attribute theme data', (tester) async {
+        var delta = Delta()
+          ..insert(
+            'Website',
+            ParchmentAttribute.link.fromString('https://github.com').toJson(),
+          )
+          ..insert('\n');
+        var doc = ParchmentDocument.fromDelta(delta);
+        final BuildContext context = tester.element(find.byType(Container));
+        var theme = FleatherThemeData.fallback(context)
+            .copyWith(link: const TextStyle(color: Colors.red));
+        var editor =
+            EditorSandBox(tester: tester, document: doc, fleatherTheme: theme);
+        await editor.pumpAndTap();
+        // await tester.pumpAndSettle();
+        final p = tester.widget(find.byType(RichText).first) as RichText;
+        final text = p.text as TextSpan;
+        expect(text.children!.first.style!.color, Colors.red);
+      });
+
+      Future<void> testStrutUsage(WidgetTester tester, Delta delta) async {
+        var doc = ParchmentDocument.fromDelta(delta);
+        final strutStyle = StrutStyle(
+          leading: 0.2,
+          height: 1.0,
+          forceStrutHeight: true,
+        );
+        final BuildContext context = tester.element(find.byType(Container));
+        var editor = EditorSandBox(
+            tester: tester,
+            document: doc,
+            fleatherTheme: FleatherThemeData.fallback(context).copyWith(
+              strutStyle: strutStyle,
+            ));
+        await editor.pumpAndTap();
+        final p = tester.widget(find.byType(RichText).first) as RichText;
+        expect(p.strutStyle?.leading, strutStyle.leading);
+        expect(p.strutStyle?.height, strutStyle.height);
+        expect(p.strutStyle?.forceStrutHeight, strutStyle.forceStrutHeight);
+      }
+
+      testWidgets('plain text uses StrutStyle', (tester) async {
+        await testStrutUsage(tester, Delta()..insert('Hello world\n'));
+      });
+
+      testWidgets('numbers in lists  uses StrutStyle', (tester) async {
+        await testStrutUsage(
+            tester,
+            Delta()
+              ..insert('Hello world')
+              ..insert('\n', {'block': 'ol'}));
+      });
+
+      testWidgets('bullets in lists  uses StrutStyle', (tester) async {
+        await testStrutUsage(
+            tester,
+            Delta()
+              ..insert('Hello world')
+              ..insert('\n', {'block': 'ul'}));
+      });
     });
 
     testWidgets('changes to controller does not request keyboard',
@@ -296,7 +339,7 @@ void main() {
       await editor.pumpAndTap();
       await editor.updateSelection(base: 0, extent: 3);
       await editor.disable();
-      final widget = tester.widget(find.byType(FleatherField)) as FleatherField;
+      final widget = tester.widget<FleatherField>(find.byType(FleatherField));
       expect(widget.readOnly, true);
     });
 
@@ -454,6 +497,60 @@ void main() {
           MaterialApp(home: FleatherEditor(controller: FleatherController()));
       await tester.pumpWidget(widget);
       // Fails if thrown
+    });
+
+    group('TextWidthBasis', () {
+      testWidgets('shrink editor to content size in read only', (tester) async {
+        final editor = EditorSandBox(
+          useField: false,
+          tester: tester,
+          document: ParchmentDocument.fromJson([
+            {'insert': 'something written\n'},
+            {'insert': 'some other thing\n'},
+            {'insert': 'on last thing\n'},
+            {
+              'insert': '\n',
+              'attributes': {'block': 'ul'}
+            }
+          ]),
+          autofocus: true,
+          // Scrollable forces expansion of editor
+          scrollable: false,
+          readOnly: true,
+          // We don't want to enable selection interactions
+          // (will cause error if not scrollable)
+          enableSelectionInteraction: false,
+          // We don't want to show cursor
+          // (will cause error if not scrollable)
+          showCursor: false,
+          textWidthBasis: TextWidthBasis.longestLine,
+        );
+        await editor.pump();
+        final state = tester.state<RawEditorState>(find.byType(RawEditor));
+        final longestLine =
+            state.renderEditor.childAtPosition(TextPosition(offset: 1));
+        expect(state.renderEditor.size.width.toInt(),
+            equals(longestLine.size.width.toInt()));
+      });
+
+      testWidgets(
+          'expands editor in edition mode, regardless of textWidthBasis',
+          (tester) async {
+        final editor = EditorSandBox(
+          useField: false,
+          tester: tester,
+          document: ParchmentDocument.fromJson([
+            {'insert': 'a\n'}
+          ]),
+          autofocus: true,
+          readOnly: false,
+          textWidthBasis: TextWidthBasis.longestLine,
+        );
+        await editor.pump();
+        final state = tester.state<RawEditorState>(find.byType(RawEditor));
+        expect(state.renderEditor.size.width,
+            MediaQuery.of(state.context).size.width);
+      });
     });
 
     testWidgets('Copy intent sends data to clipboard manager', (tester) async {
@@ -1505,7 +1602,7 @@ void main() {
       });
     });
 
-    group('field', () {
+    group('Field', () {
       testWidgets('creating field without focusNode does not throw _CastError',
           (tester) async {
         final widget = MaterialApp(
@@ -1515,6 +1612,136 @@ void main() {
         );
         await tester.pumpWidget(widget);
         // Fails if thrown
+      });
+
+      testWidgets('handle insertion embeds with no baseline', (tester) async {
+        final controller = FleatherController();
+        final widget = MaterialApp(
+          home: FleatherField(
+            controller: controller,
+          ),
+        );
+        await tester.pumpWidget(widget);
+        await tester.tap(find.byType(FleatherField));
+        await tester.pump();
+        controller.replaceText(0, 0, BlockEmbed.horizontalRule,
+            selection: TextSelection.collapsed(offset: 1));
+        await tester.pump(throttleDuration);
+        controller.replaceText(0, 0, BlockEmbed.horizontalRule,
+            selection: TextSelection.collapsed(offset: 1));
+        await tester.pump(throttleDuration);
+      });
+
+      testWidgets(
+          'shows cursor on screen when not scrollable with scroll parent',
+          (tester) async {
+        final scrollController = ScrollController();
+        final controller = FleatherController();
+        final widget = MaterialApp(
+          home: SingleChildScrollView(
+            controller: scrollController,
+            child: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (var i = 0; i < 20; i++) ...[
+                    FleatherField(
+                      key: Key('Field.Key.$i'),
+                      focusNode: FocusNode(),
+                      scrollable: false,
+                      autofocus: true,
+                      showCursor: true,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      controller: i == 15 ? controller : FleatherController(),
+                    )
+                  ]
+                ],
+              ),
+            ),
+          ),
+        );
+        await tester.pumpWidget(widget);
+        final field = tester.widget<FleatherField>(
+            find.byKey(Key('Field.Key.15'), skipOffstage: false));
+        field.focusNode!.requestFocus();
+        await tester.pumpAndSettle();
+        expect(scrollController.position.pixels,
+            greaterThan(scrollController.position.minScrollExtent));
+        expect(scrollController.position.pixels,
+            lessThan(scrollController.position.maxScrollExtent));
+        final initialScrollPosition = scrollController.position.pixels;
+        final newInput = 'Line1\nLine2';
+        controller.replaceText(0, 0, newInput,
+            selection: TextSelection.collapsed(offset: newInput.length));
+        await tester.pumpAndSettle(throttleDuration);
+        expect(scrollController.position.pixels,
+            greaterThan(initialScrollPosition));
+      });
+
+      testWidgets('shows cursor on screen when scrollable with scroll parent',
+          (tester) async {
+        final editorScrollController = ScrollController();
+        final focusNode = FocusNode();
+        final Delta delta = Delta();
+        for (int i = 0; i < 20; i++) {
+          delta.insert('Hello world!\n');
+        }
+        final controller =
+            FleatherController(document: ParchmentDocument.fromDelta(delta));
+        final widget = MaterialApp(
+          home: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              height: 150,
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    SizedBox(height: 500),
+                    SizedBox(
+                      height: 100,
+                      child: FleatherEditor(
+                        focusNode: focusNode,
+                        showCursor: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        controller: controller,
+                        scrollController: editorScrollController,
+                      ),
+                    ),
+                    SizedBox(height: 500),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpWidget(widget);
+
+        // expect the caret for a position outside of editor's current viewport is not inside the editor's bounding box
+        final renderEditor =
+            tester.state<RawEditorState>(find.byType(RawEditor)).renderEditor;
+        final editorRect = Rect.fromLTWH(
+            0, 0, renderEditor.size.width, renderEditor.size.height);
+        var caretRect =
+            renderEditor.getLocalRectForCaret(TextPosition(offset: 200));
+        expect(editorRect.contains(caretRect.topLeft), isFalse);
+        expect(editorRect.contains(caretRect.bottomRight), isFalse);
+        expect(editorScrollController.offset, equals(0));
+
+        // move cursor to a position outside of current viewport and focus
+        controller.updateSelection(TextSelection.collapsed(offset: 200));
+        focusNode.requestFocus();
+        await tester.pumpAndSettle(throttleDuration);
+
+        // expect that editor is aligned to the bottom of screen and visible, with caret inside the editor's bounding box
+        caretRect =
+            renderEditor.getLocalRectForCaret(TextPosition(offset: 200));
+        expect(renderEditor.localToGlobal(Offset.zero).dy, equals(50));
+        expect(editorRect.contains(caretRect.topLeft), isTrue);
+        expect(editorRect.contains(caretRect.bottomRight), isTrue);
+        expect(editorScrollController.offset, greaterThan(0));
       });
 
       testWidgets(

@@ -1,3 +1,15 @@
+## 1.25.1
+
+* Add `hasSpanEmbed` to `LineNode`
+
+## 1.25.0
+
+* [Fix] Incorrect `Node` cached offset when moving `Node`s
+
+## 1.24.0
+
+* [Fix] regex for ul in Markdown decoder
+
 ## 1.22.0
 
 * [Fix] HTML encoding when multi-levels lists are followed by other lists or a plain paragraph
