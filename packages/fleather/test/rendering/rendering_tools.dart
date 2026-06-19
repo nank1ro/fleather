@@ -353,6 +353,9 @@ class FakeTickerProvider implements TickerProvider {
 
 class FakeTicker implements Ticker {
   @override
+  bool forceFrames = false;
+
+  @override
   bool muted = false;
 
   // Added in Flutter 3.44; required so this hand-rolled Ticker stub keeps
