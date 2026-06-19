@@ -254,8 +254,16 @@ class RenderEditableContainerBox extends RenderBox
       }
       targetChild = childAfter(targetChild);
     }
+    // The position can reference a node that has no current child render box —
+    // e.g. a stale selection during the relayout right after the document
+    // changed, reached by the selection overlay's scroll-driven metric update
+    // (`EditorTextSelectionOverlay.updateForScroll` → `preferredLineHeight`).
+    // Clamp to the last child rather than crashing — consistent with
+    // [childAtOffset]'s first/last clamping — so the overlay self-corrects on
+    // the next valid frame instead of throwing a release-mode
+    // "Null check operator used on a null value" (the debug assert is stripped).
     assert(targetChild != null, 'No child at position $position');
-    return targetChild!;
+    return targetChild ?? lastChild!;
   }
 
   /// Returns child of this container located at the specified local `offset`.
