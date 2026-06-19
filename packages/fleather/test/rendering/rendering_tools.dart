@@ -358,12 +358,6 @@ class FakeTicker implements Ticker {
   @override
   bool muted = false;
 
-  // Added in Flutter 3.44; required so this hand-rolled Ticker stub keeps
-  // implementing the interface (otherwise the whole rendering test suite fails
-  // to compile).
-  @override
-  bool forceFrames = false;
-
   @override
   void absorbTicker(Ticker originalTicker) {}
 
