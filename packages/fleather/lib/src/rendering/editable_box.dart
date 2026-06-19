@@ -261,8 +261,9 @@ class RenderEditableContainerBox extends RenderBox
     // Clamp to the last child rather than crashing — consistent with
     // [childAtOffset]'s first/last clamping — so the overlay self-corrects on
     // the next valid frame instead of throwing a release-mode
-    // "Null check operator used on a null value" (the debug assert is stripped).
-    assert(targetChild != null, 'No child at position $position');
+    // "Null check operator used on a null value". (The old `assert(targetChild
+    // != null)` here asserted an invariant we now know is violable, so it's
+    // gone — the clamp is the uniform, testable behavior in both debug/release.)
     return targetChild ?? lastChild!;
   }
 
