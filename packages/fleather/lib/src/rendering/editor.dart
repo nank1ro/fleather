@@ -347,31 +347,38 @@ class RenderEditor extends RenderEditableContainerBox
     // adjust the dy value by the height of the line. We also add a small margin
     // so that the caret is not too close to the edge of the viewport.
     final endpoints = getEndpointsForSelection(selection);
+    // For a collapsed selection there's a single endpoint (the caret); for a
+    // range, reveal the extent (last) endpoint so navigating to an off-screen
+    // selection — e.g. a find match — scrolls it into view rather than bailing.
+    final TextSelectionPoint endpoint;
+    final TextPosition caretPosition;
     if (endpoints.length == 1) {
-      // Collapsed selection => caret
-      final child = childAtPosition(selection.extent);
-      final childPosition = TextPosition(
-          offset: selection.extentOffset - child.node.documentOffset);
-      final caretTop = endpoints.single.point.dy -
-          child.preferredLineHeight(childPosition) -
-          kMargin;
-      final caretBottom = endpoints.single.point.dy + kMargin;
-      final caretHeight = caretBottom - caretTop;
-      double? dy;
-
-      /// When caret is bigger than viewport, we reveal it's bottom.
-      if (caretBottom > scrollOffset + viewportHeight ||
-          caretHeight > viewportHeight) {
-        dy = caretBottom - viewportHeight;
-      } else if (caretTop < scrollOffset) {
-        dy = caretTop;
-      }
-      if (dy == null) return null;
-      // Clamping to 0.0 so that the content does not jump unnecessarily.
-      return math.max(dy, 0.0);
+      endpoint = endpoints.single;
+      caretPosition = selection.extent;
+    } else {
+      endpoint = endpoints.last;
+      caretPosition = TextPosition(offset: selection.end);
     }
-    // TODO: Implement for non-collapsed selection.
-    return null;
+    final child = childAtPosition(caretPosition);
+    final childPosition = TextPosition(
+        offset: caretPosition.offset - child.node.documentOffset);
+    final caretTop = endpoint.point.dy -
+        child.preferredLineHeight(childPosition) -
+        kMargin;
+    final caretBottom = endpoint.point.dy + kMargin;
+    final caretHeight = caretBottom - caretTop;
+    double? dy;
+
+    /// When caret is bigger than viewport, we reveal it's bottom.
+    if (caretBottom > scrollOffset + viewportHeight ||
+        caretHeight > viewportHeight) {
+      dy = caretBottom - viewportHeight;
+    } else if (caretTop < scrollOffset) {
+      dy = caretTop;
+    }
+    if (dy == null) return null;
+    // Clamping to 0.0 so that the content does not jump unnecessarily.
+    return math.max(dy, 0.0);
   }
 
   @override
