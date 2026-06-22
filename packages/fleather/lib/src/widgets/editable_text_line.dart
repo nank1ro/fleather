@@ -31,6 +31,10 @@ class EditableTextLine extends RenderObjectWidget {
   final Color selectionColor;
   final bool enableInteractiveSelection;
   final bool hasFocus;
+
+  /// Paint the selection highlight even when [hasFocus] is false. See
+  /// [RenderEditableTextLine.forceSelectionVisible].
+  final bool forceSelectionVisible;
   final double devicePixelRatio;
 
   /// Creates an editable line of text.
@@ -44,6 +48,7 @@ class EditableTextLine extends RenderObjectWidget {
     required this.enableInteractiveSelection,
     required this.hasFocus,
     required this.devicePixelRatio,
+    this.forceSelectionVisible = false,
     this.leading,
     this.indentWidth = 0.0,
     this.spacing = const VerticalSpacing(),
@@ -70,6 +75,7 @@ class EditableTextLine extends RenderObjectWidget {
       selectionColor: selectionColor,
       enableInteractiveSelection: enableInteractiveSelection,
       hasFocus: hasFocus,
+      forceSelectionVisible: forceSelectionVisible,
       devicePixelRatio: devicePixelRatio,
       inlineCodeTheme: theme.inlineCode,
     );
@@ -87,6 +93,7 @@ class EditableTextLine extends RenderObjectWidget {
     renderObject.selectionColor = selectionColor;
     renderObject.enableInteractiveSelection = enableInteractiveSelection;
     renderObject.hasFocus = hasFocus;
+    renderObject.forceSelectionVisible = forceSelectionVisible;
     renderObject.devicePixelRatio = devicePixelRatio;
     renderObject.inlineCodeTheme = theme.inlineCode;
   }

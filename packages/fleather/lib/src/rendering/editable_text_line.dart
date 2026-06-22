@@ -27,6 +27,7 @@ class RenderEditableTextLine extends RenderEditableBox {
     required Color selectionColor,
     required bool enableInteractiveSelection,
     required bool hasFocus,
+    bool forceSelectionVisible = false,
     required InlineCodeThemeData inlineCodeTheme,
     double devicePixelRatio = 1.0,
     // Not implemented fields are below:
@@ -44,7 +45,8 @@ class RenderEditableTextLine extends RenderEditableBox {
         _enableInteractiveSelection = enableInteractiveSelection,
         _devicePixelRatio = devicePixelRatio,
         _inlineCodeTheme = inlineCodeTheme,
-        _hasFocus = hasFocus;
+        _hasFocus = hasFocus,
+        _forceSelectionVisible = forceSelectionVisible;
 
   //
 
@@ -125,7 +127,21 @@ class RenderEditableTextLine extends RenderEditableBox {
   /// [enableInteractiveSelection] and [hasFocus].
   ///
   /// If [enableInteractiveSelection] is not set then defaults to `true`.
-  bool get _shouldPaintSelection => enableInteractiveSelection && hasFocus;
+  bool get _shouldPaintSelection =>
+      enableInteractiveSelection && (hasFocus || forceSelectionVisible);
+
+  /// When true, the selection highlight is painted even while [hasFocus] is
+  /// false (the cursor stays focus-gated). Lets an external feature — e.g. an
+  /// in-buffer find bar that holds keyboard focus itself — show the current
+  /// match like a normal selection without stealing focus from the editor.
+  bool get forceSelectionVisible => _forceSelectionVisible;
+  bool _forceSelectionVisible;
+
+  set forceSelectionVisible(bool value) {
+    if (_forceSelectionVisible == value) return;
+    _forceSelectionVisible = value;
+    if (containsSelection) markNeedsPaint();
+  }
 
   bool get containsSelection => intersectsWithSelection(node, _selection);
 

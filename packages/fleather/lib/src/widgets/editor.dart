@@ -149,6 +149,13 @@ class FleatherEditor extends StatefulWidget {
   /// The cursor refers to the blinking caret when the editor is focused.
   final bool showCursor;
 
+  /// Paint the selection highlight even when the editor does not have focus.
+  ///
+  /// The blinking cursor stays focus-gated; only the selection is shown. Useful
+  /// for an in-buffer find bar that holds keyboard focus itself yet wants the
+  /// current match shown like a normal selection. Defaults to `false`.
+  final bool showSelectionWhenUnfocused;
+
   /// Whether the text can be changed.
   ///
   /// When this is set to `true`, the text cannot be modified
@@ -313,6 +320,7 @@ class FleatherEditor extends StatefulWidget {
       this.padding = EdgeInsets.zero,
       this.autofocus = false,
       this.showCursor = true,
+      this.showSelectionWhenUnfocused = false,
       this.readOnly = false,
       this.autocorrect = true,
       this.enableSuggestions = true,
@@ -492,6 +500,7 @@ class _FleatherEditorState extends State<FleatherEditor>
       autofocus: widget.autofocus,
       autocorrect: widget.autocorrect,
       showCursor: widget.showCursor,
+      showSelectionWhenUnfocused: widget.showSelectionWhenUnfocused,
       readOnly: widget.readOnly,
       enableSuggestions: widget.enableSuggestions,
       enableInteractiveSelection: widget.enableInteractiveSelection,
@@ -595,6 +604,7 @@ class RawEditor extends StatefulWidget {
     this.padding = EdgeInsets.zero,
     this.autofocus = false,
     bool? showCursor,
+    this.showSelectionWhenUnfocused = false,
     this.readOnly = false,
     this.autocorrect = true,
     this.enableSuggestions = true,
@@ -710,6 +720,10 @@ class RawEditor extends StatefulWidget {
   ///  * [showSelectionHandles], which controls the visibility of the selection
   ///    handles.
   final bool showCursor;
+
+  /// Paint the selection highlight even when the editor lacks focus (the cursor
+  /// stays focus-gated). See [FleatherEditor.showSelectionWhenUnfocused].
+  final bool showSelectionWhenUnfocused;
 
   /// The style to be used for the editing cursor.
   final CursorStyle cursorStyle;
@@ -1849,6 +1863,7 @@ class RawEditorState extends EditorState
               textWidthBasis: widget.textWidthBasis,
             ),
             hasFocus: _hasFocus,
+            forceSelectionVisible: widget.showSelectionWhenUnfocused,
             devicePixelRatio: MediaQuery.of(context).devicePixelRatio,
           ),
         ));
