@@ -376,6 +376,35 @@ void main() {
           expect(controller.document.toDelta(), Delta()..insert('\n'));
         });
       });
+
+      test('flushes a pending throttled snapshot before undoing', () {
+        fakeAsync((async) {
+          // Build "2x2\n3x3\n" and record it to history.
+          controller.compose(Delta()..insert('2x2\n3x3'));
+          async.flushTimers();
+          // Delete the last line and record it: -> "2x2\n".
+          controller.compose(Delta()
+            ..retain(3)
+            ..delete(4));
+          async.flushTimers();
+          expect(controller.document.toDelta(), Delta()..insert('2x2\n'));
+          // Shrink again WITHIN the throttle window, so this snapshot is
+          // still pending (no flushTimers): -> "2\n".
+          controller.compose(Delta()
+            ..retain(1)
+            ..delete(2));
+          expect(controller.document.toDelta(), Delta()..insert('2\n'));
+          // Undo must flush the pending snapshot first, so it reverts the most
+          // recent (un-recorded) edit and lands within bounds. Without the
+          // flush the stack still tracks the larger "2x2\n" and the undo delta
+          // is oversized for the live "2\n" document — re-inserting past the
+          // end of the document (tripping the insert assertion, and with a
+          // diff-based controller, Delta.diff's "non-document" error).
+          controller.undo();
+          expect(controller.document.toDelta(), Delta()..insert('2x2\n'));
+          expect(controller.canUndo, true);
+        });
+      });
     });
 
     group('autoformats', () {

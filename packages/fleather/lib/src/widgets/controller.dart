@@ -368,12 +368,40 @@ extension HistoryHandler on FleatherController {
 
   /// Sets current document state to it's previous state, if any.
   void undo() {
+    _flushHistory();
     _update(_history.undo());
   }
 
   /// Sets current document state to it's next state, if any.
   void redo() {
+    _flushHistory();
     _update(_history.redo());
+  }
+
+  /// Immediately records any throttled history snapshot that is still waiting
+  /// on the timer, so undo/redo operate against the live document instead of a
+  /// stale [HistoryStack] state.
+  ///
+  /// History snapshots are pushed on a trailing throttle ([_updateHistory]).
+  /// An edit made within that window updates the document but is not yet in the
+  /// stack, so the stack still tracks a differently-sized document. The next
+  /// undo/redo would then compose a mis-sized delta against the live document —
+  /// landing an insert out of bounds, or producing a non-document delta that
+  /// trips `Delta.diff`. Flushing first turns the pending edit into its own
+  /// undo step (so e.g. Ctrl+Z right after typing undoes the typing).
+  void _flushHistory() {
+    final timer = _throttleTimer;
+    if (timer == null || !timer.isActive) return;
+    timer.cancel();
+    _throttleTimer = null;
+    _history.push(document.toDelta());
+    // We cancelled the underlying Timer externally; the throttle closure only
+    // clears its internal handle from inside the (now-dead) callback, so
+    // re-arm it to reset that state — mirrors what `clear()` does.
+    _throttledPush = _throttle(
+      duration: throttleDuration,
+      function: _history.push,
+    );
   }
 
   void _update(Delta? changeDelta) {
