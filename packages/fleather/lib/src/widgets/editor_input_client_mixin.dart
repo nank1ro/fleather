@@ -184,6 +184,50 @@ mixin RawEditorStateTextInputClientMixin on EditorState
       } else if (textEditingDelta is TextEditingDeltaNonTextUpdate) {
         updateTextInputConnectionStyle(textEditingDelta.selection.base);
       }
+
+      // Guard against a delta the platform (macOS/IME autocorrect,
+      // QuickType, ...) computed against a document snapshot that no
+      // longer exists by the time it arrives here. This happens when
+      // something else mutates the document in between — most notably the
+      // app calling `FleatherController.replaceText` directly, bypassing
+      // the TextInput channel entirely (e.g. accepting an autocomplete
+      // suggestion) — because `setEditingState` is an async
+      // platform-channel round-trip and can't atomically cancel an
+      // in-flight native delta.
+      //
+      // Applying `start`/`length` verbatim lets `ParchmentDocument.replace`
+      // (which inserts new text at `start + length` *before* deleting the
+      // old range, see document.dart) call `insert` past the end of the
+      // live document, which throws a null-check error deep in
+      // `ContainerNode.insert`. Validate against the CURRENT document
+      // length — the only ground truth available here — and either drop
+      // the delta (nothing sane to clamp to) or shrink it to what's
+      // actually still there.
+      final docLength = widget.controller.document.length;
+      // A delta that inserts text needs `start + length` to land strictly
+      // *inside* the document, because that's where `replace` performs its
+      // insert; landing exactly on `docLength` fails the same way as
+      // landing past it. A pure deletion never inserts, so it may
+      // legitimately reach all the way to `docLength` (e.g. select all +
+      // delete, which lands exactly on the still-current document length).
+      final maxRangeEnd = data.isEmpty ? docLength : docLength - 1;
+      if (start < 0 || start >= docLength) {
+        // Entirely out of bounds: there's no reasonable position to clamp
+        // to. Drop the delta and invalidate the cached remote value so the
+        // next `updateRemoteValueIfNeeded()` call pushes a fresh
+        // `setEditingState` to the engine. Resync immediately (instead of
+        // leaving the cached value null) so a later delta in this same
+        // batch can still safely call `TextEditingDelta.apply` on it.
+        _lastKnownRemoteTextEditingValue = null;
+        updateRemoteValueIfNeeded();
+        continue;
+      }
+      if (start + length > maxRangeEnd) {
+        // Partially out of bounds: clamp so the mutation only touches text
+        // that's actually still there.
+        length = maxRangeEnd - start;
+      }
+
       _lastKnownRemoteTextEditingValue =
           textEditingDelta.apply(_lastKnownRemoteTextEditingValue!);
       widget.controller.replaceText(start, length, data,

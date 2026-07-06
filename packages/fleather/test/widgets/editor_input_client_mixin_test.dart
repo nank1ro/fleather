@@ -385,4 +385,151 @@ void main() {
     expect(textInputUpdateConfigProperties?['enableSuggestions'], true);
     expect(textInputSetClientProperties, isNull);
   });
+
+  group('guards against stale deltas (Sentry 132143638)', () {
+    // Reproduces the crash: a native TextEditingDelta is computed by the
+    // platform against a document snapshot, but before it arrives here
+    // something else (e.g. the app calling `FleatherController.replaceText`
+    // directly, as textcalc's autocomplete-accept does) mutates the document
+    // out from under it. Applying the delta's stale start/length verbatim
+    // used to let `ParchmentDocument.replace` call `insert` past the end of
+    // the live document, throwing a null-check error in
+    // `ContainerNode.insert`.
+    final capturedEditingStates = <Map<String, dynamic>>[];
+
+    void bind(WidgetTester tester) {
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.textInput, (MethodCall methodCall) async {
+        if (methodCall.method == 'TextInput.setEditingState') {
+          capturedEditingStates
+              .add(methodCall.arguments as Map<String, dynamic>);
+        }
+        return null;
+      });
+    }
+
+    setUp(() => capturedEditingStates.clear());
+
+    testWidgets(
+        'drops an entirely out-of-range delta without crashing and resyncs '
+        'the remote value', (tester) async {
+      bind(tester);
+      final document = ParchmentDocument.fromJson([
+        {'insert': 'Hello world\n'} // length 12
+      ]);
+      final editor = EditorSandBox(tester: tester, document: document);
+      await editor.pump();
+      await editor.tap();
+
+      // Mimic the app mutating the document directly (bypassing the
+      // TextInput channel), e.g. an autocomplete accept: replace "world"
+      // (start 6, length 5) with "hi" -> "Hello hi\n" (length 9).
+      editor.controller.replaceText(6, 5, 'hi',
+          selection: const TextSelection.collapsed(offset: 8));
+      await tester.pumpAndSettle(throttleDuration);
+      capturedEditingStates.clear();
+
+      final editorState =
+          tester.state(find.byType(RawEditor)) as RawEditorState;
+
+      // A native delta computed against the OLD 12-length document: e.g.
+      // autocorrect replacing "ld" (start 9, end 11) with "LD". The live
+      // document is now only 9 characters long, so `start` (9) is already
+      // at/beyond the current document length -> entirely out of bounds.
+      const staleDelta = TextEditingDeltaReplacement(
+        oldText: 'Hello world\n',
+        replacedRange: TextRange(start: 9, end: 11),
+        replacementText: 'LD',
+        selection: TextSelection.collapsed(offset: 11),
+        composing: TextRange.empty,
+      );
+
+      // Must not throw (previously crashed with the null-check error from
+      // ContainerNode.insert).
+      expect(() => editorState.updateEditingValueWithDeltas([staleDelta]),
+          returnsNormally);
+      await tester.pumpAndSettle(throttleDuration);
+
+      // The document is untouched by the dropped delta - still exactly
+      // what the app's direct mutation produced.
+      expect(editor.controller.document.toPlainText(), 'Hello hi\n');
+
+      // The editor resynced the engine with the live state instead of
+      // silently trusting the stale native value.
+      expect(capturedEditingStates, isNotEmpty);
+      expect(capturedEditingStates.last['text'], 'Hello hi\n');
+    });
+
+    testWidgets(
+        'clamps a delta whose range extends past the current document',
+        (tester) async {
+      bind(tester);
+      final document = ParchmentDocument.fromJson([
+        {'insert': 'Hello world foo\n'} // length 16
+      ]);
+      final editor = EditorSandBox(tester: tester, document: document);
+      await editor.pump();
+      await editor.tap();
+
+      // Direct app mutation shrinks the tail: remove " foo" (start 11,
+      // length 4) -> "Hello world\n" (length 12).
+      editor.controller.replaceText(11, 4, '',
+          selection: const TextSelection.collapsed(offset: 11));
+      await tester.pumpAndSettle(throttleDuration);
+      capturedEditingStates.clear();
+
+      final editorState =
+          tester.state(find.byType(RawEditor)) as RawEditorState;
+
+      // A native deletion computed against the OLD 16-length document:
+      // deleting "world foo" (start 6, end 15, length 9). The live
+      // document is now only 12 characters long, so `start` (6) is still
+      // valid but `start + length` (15) overruns it -> clamp to what's
+      // actually still there (length 6, i.e. delete through position 12).
+      const staleDelta = TextEditingDeltaDeletion(
+        oldText: 'Hello world foo\n',
+        deletedRange: TextRange(start: 6, end: 15),
+        selection: TextSelection.collapsed(offset: 6),
+        composing: TextRange.empty,
+      );
+
+      expect(() => editorState.updateEditingValueWithDeltas([staleDelta]),
+          returnsNormally);
+      await tester.pumpAndSettle(throttleDuration);
+
+      // Parchment itself preserves the document's trailing newline
+      // invariant, so the clamped delete(6, 6) only removes "world" and
+      // leaves a valid, non-corrupt document.
+      expect(editor.controller.document.toPlainText(), 'Hello \n');
+      expect(editor.controller.selection.extentOffset,
+          lessThanOrEqualTo(editor.controller.document.length));
+    });
+
+    testWidgets('an in-bounds delta still applies exactly as before',
+        (tester) async {
+      bind(tester);
+      final document = ParchmentDocument.fromJson([
+        {'insert': 'Hello world\n'} // length 12
+      ]);
+      final editor = EditorSandBox(tester: tester, document: document);
+      await editor.pump();
+      await editor.tap();
+
+      final editorState =
+          tester.state(find.byType(RawEditor)) as RawEditorState;
+
+      // In-sync delta: replace "world" (start 6, end 11) with "there".
+      const delta = TextEditingDeltaReplacement(
+        oldText: 'Hello world\n',
+        replacedRange: TextRange(start: 6, end: 11),
+        replacementText: 'there',
+        selection: TextSelection.collapsed(offset: 11),
+        composing: TextRange.empty,
+      );
+      editorState.updateEditingValueWithDeltas([delta]);
+      await tester.pumpAndSettle(throttleDuration);
+
+      expect(editor.controller.document.toPlainText(), 'Hello there\n');
+    });
+  });
 }

@@ -141,6 +141,12 @@ void main() {
       when(() => rawEditor.autofocus).thenReturn(true);
       when(() => rawEditor.enableSuggestions).thenReturn(true);
       when(() => rawEditor.enableInteractiveSelection).thenReturn(true);
+      // Long enough that none of the in-bounds deltas exercised below trip
+      // the out-of-bounds guard in `updateEditingValueWithDeltas` (which
+      // reads `controller.document.length`).
+      when(() => controller.document).thenReturn(ParchmentDocument.fromJson([
+        {'insert': 'Some longer example document text\n'}
+      ]));
       when(() => controller.replaceText(any(), any(), any(),
           selection: any(named: 'selection'))).thenReturn(null);
       editorState.openConnectionIfNeeded();
