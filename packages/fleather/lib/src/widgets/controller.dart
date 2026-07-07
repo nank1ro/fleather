@@ -66,14 +66,22 @@ class FleatherController extends ChangeNotifier {
   /// If nothing is selected but we've toggled an attribute,
   /// we also merge those in our style before returning.
   ParchmentStyle getSelectionStyle() {
-    int start = _selection.start;
-    final length = _selection.end - start;
+    // Clamp to the document bounds: when the selection outlives a document
+    // shrink (a fast compose/delete before the toolbar reads the style), a
+    // raw out-of-range offset makes `slice(start - 1, start)` empty — so
+    // `Delta.first` throws `StateError('No element')` — and feeds an invalid
+    // offset into `collectStyle`, both straight out of the toolbar's
+    // ToggleStyleButton rebuild (Sentry NOTES-CALCULATOR-A4).
+    final docLength = document.length;
+    int start = _selection.start.clamp(0, docLength);
+    final length = _selection.end.clamp(0, docLength) - start;
 
     // We decrement the start position to collect styles
     // before current selection position if selection is collaped and
     // it's not on the beginning of a new line.
     if (length == 0 && start > 0) {
-      final data = document.toDelta().slice(start - 1, start).first.data;
+      final slice = document.toDelta().slice(start - 1, start);
+      final data = slice.isEmpty ? null : slice.first.data;
       if (data is String && !data.endsWith('\n')) {
         start = start - 1;
       }
