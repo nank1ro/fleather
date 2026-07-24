@@ -705,6 +705,79 @@ void main() {
       await tester.pumpAndSettle(throttleDuration);
     });
 
+    testWidgets(
+        'Paste clamps a stale selection when the document shrinks during the '
+        'clipboard await (Sentry NOTES-CALCULATOR-A0 / -CW)', (tester) async {
+      prepareClipboard();
+      final data = FleatherClipboardData(plainText: 'X');
+      late final EditorSandBox editor;
+      editor = EditorSandBox(
+        tester: tester,
+        document: ParchmentDocument.fromJson([
+          {'insert': 'Hello World!\n'}
+        ]),
+        autofocus: true,
+        clipboardManager: FleatherCustomClipboardManager(
+          // The clipboard round-trip is async; simulate a concurrent compose
+          // (the real undo/buffer-sync path goes through the controller) that
+          // shrinks the document *during* the await. The controller re-clamps
+          // its own selection to the shorter document, but `pasteText` already
+          // captured the pre-shrink selection into a local before the await.
+          getData: () {
+            editor.controller.compose(Delta()..delete(11),
+                source: ChangeSource.history); // 'Hello World!\n' -> '!\n'
+            return Future.value(data);
+          },
+          setData: (_) => throw UnimplementedError(),
+        ),
+      );
+      await editor.pump();
+      // Select "World" (offsets 6..11) — valid against the original length 13.
+      await editor.updateSelection(base: 6, extent: 11);
+
+      // Before the fix, the stale retain(6)/delete(5) composes out of bounds
+      // on the now length-2 document and throws (parchment's ContainerNode
+      // .insert assertion), tearing the node tree. After the fix the offsets
+      // are clamped to the document end so the paste lands safely, and the
+      // caret is derived from the paste delta (not the moved controller
+      // selection) so it ends up after the pasted 'X'.
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+      expect(editor.document.toPlainText(), '!X\n');
+      expect(editor.selection, const TextSelection.collapsed(offset: 2));
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets('Paste over a backward (reversed) selection does not crash',
+        (tester) async {
+      prepareClipboard();
+      final data = FleatherClipboardData(plainText: 'X');
+      final editor = EditorSandBox(
+        tester: tester,
+        document: ParchmentDocument.fromJson([
+          {'insert': 'Hello World!\n'}
+        ]),
+        autofocus: true,
+        clipboardManager: FleatherCustomClipboardManager(
+          getData: () => Future.value(data),
+          setData: (_) => throw UnimplementedError(),
+        ),
+      );
+      await editor.pump();
+      // Backward drag-select "World": base 11 > extent 6. Without normalizing
+      // the order, delete(extent - base) is negative and trips Delta.delete's
+      // `count >= 0` assertion.
+      await editor.updateSelection(base: 11, extent: 6);
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+      expect(editor.document.toPlainText(), 'Hello X!\n');
+      expect(editor.selection, const TextSelection.collapsed(offset: 7));
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
     group('Text selection', () {
       testWidgets('disabled selection interaction disables associated gestures',
           (tester) async {

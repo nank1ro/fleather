@@ -1331,9 +1331,24 @@ class RawEditorState extends EditorState
       return;
     }
 
+    // The document may have shrunk while awaiting the clipboard round-trip
+    // above (e.g. a concurrent buffer-sync or undo compose). The `selection`
+    // captured before the await can then point past the end of the document,
+    // and building the paste delta from those stale offsets composes an
+    // out-of-bounds retain/delete/insert that corrupts parchment's node tree
+    // (Sentry NOTES-CALCULATOR-A0 / NOTES-CALCULATOR-CW). Re-clamp to the
+    // current document bounds — mirroring the controller's
+    // `_ensureSelectionBeforeLastBreak` — and normalize the selection order so
+    // a backward (extent < base) selection never yields a negative delete.
+    final int maxOffset = controller.document.length - 1;
+    final int start = math.min(
+        math.min(selection.baseOffset, selection.extentOffset), maxOffset);
+    final int end = math.min(
+        math.max(selection.baseOffset, selection.extentOffset), maxOffset);
+
     Delta pasteDelta = Delta();
-    pasteDelta.retain(selection.baseOffset);
-    pasteDelta.delete(selection.extentOffset - selection.baseOffset);
+    pasteDelta.retain(start);
+    pasteDelta.delete(end - start);
 
     if (data.hasDelta) {
       pasteDelta = pasteDelta.concat(data.delta!);
@@ -1341,8 +1356,14 @@ class RawEditorState extends EditorState
       pasteDelta.insert(data.plainText!);
     }
 
+    // Place the caret after the pasted content, derived from the paste delta
+    // itself rather than letting `compose` transform the controller's own
+    // selection — that selection may have been moved by the concurrent edit
+    // above, which would drop the caret at the wrong place.
     controller.compose(pasteDelta,
-        source: ChangeSource.local, forceUpdateSelection: true);
+        selection: TextSelection.collapsed(
+            offset: pasteDelta.transformPosition(end, force: true)),
+        source: ChangeSource.local);
 
     if (cause == SelectionChangedCause.toolbar) {
       SchedulerBinding.instance.addPostFrameCallback((_) {
