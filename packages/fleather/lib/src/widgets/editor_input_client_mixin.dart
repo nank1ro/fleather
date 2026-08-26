@@ -418,8 +418,20 @@ mixin RawEditorStateTextInputClientMixin on EditorState
   @visibleForTesting
   TextInputConnectionStyle getTextStyle([TextPosition? position]) {
     final document = renderEditor.document;
-    ParchmentStyle parchmentStyle =
-        document.collectStyle(position?.offset ?? 0, 0);
+    // Clamp to the document bounds. `position` can be a native
+    // `TextEditingDelta`'s `selection.base` (see `updateEditingValueWithDeltas`,
+    // which routes `TextEditingDeltaNonTextUpdate` here via
+    // `updateTextInputConnectionStyle` *before* its own out-of-range guard
+    // runs), computed by the platform against a document snapshot that has
+    // since shrunk. A raw out-of-range offset feeds straight into
+    // `collectStyle`, whose parchment tree walk casts nodes (`as LineNode` /
+    // `as BlockNode`) behind a debug-only assert — stripped in a web release
+    // build, so it throws a `TypeError` instead. Same crash class already
+    // fixed for `FleatherController.getSelectionStyle` (Sentry
+    // NOTES-CALCULATOR-A4); here it is reached via IME deltas
+    // (NOTES-CALCULATOR-CZ).
+    final offset = (position?.offset ?? 0).clamp(0, document.length);
+    ParchmentStyle parchmentStyle = document.collectStyle(offset, 0);
     TextInputConnectionStyle style =
         TextInputConnectionStyle(textStyle: themeData.paragraph.style);
     if (parchmentStyle.contains(ParchmentAttribute.heading)) {

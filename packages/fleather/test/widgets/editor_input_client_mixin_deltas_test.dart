@@ -242,5 +242,27 @@ void main() {
       verify(() => controller.replaceText(0, 0, '', selection: selection));
       expect(editorState.currentTextEditingValue, updatedEditingValue);
     });
+
+    test('a TextEditingDeltaNonTextUpdate whose selection outlives a document '
+        'shrink does not crash (Sentry NOTES-CALCULATOR-CZ)', () {
+      // The platform (macOS/IME) can send a non-text update whose
+      // `selection.base` was computed against a stale, larger document
+      // snapshot. `updateTextInputConnectionStyle` feeds that offset straight
+      // into `getTextStyle` -> `document.collectStyle`, whose parchment tree
+      // walk casts nodes (`as LineNode` / `as BlockNode`) guarded only by a
+      // debug-only assert — so on a web release build an out-of-range offset
+      // throws `TypeError` (the assert is stripped). `renderEditor.document`
+      // here is the 10-char 'Some text\n'; the delta below is well-formed
+      // against its own larger `oldText` snapshot (offset 20 of 33) but its
+      // base sits past the live document, so it must be clamped, not crash.
+      // Same fix class as `getSelectionStyle` (NOTES-CALCULATOR-A4).
+      const selection = TextSelection.collapsed(offset: 20);
+      const delta = TextEditingDeltaNonTextUpdate(
+          oldText: 'Some longer example document text',
+          selection: selection,
+          composing: TextRange.empty);
+      expect(() => editorState.updateEditingValueWithDeltas([delta]),
+          returnsNormally);
+    });
   });
 }
