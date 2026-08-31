@@ -1346,24 +1346,84 @@ class RawEditorState extends EditorState
     final int end = math.min(
         math.max(selection.baseOffset, selection.extentOffset), maxOffset);
 
-    Delta pasteDelta = Delta();
-    pasteDelta.retain(start);
-    pasteDelta.delete(end - start);
-
     if (data.hasDelta) {
+      Delta pasteDelta = Delta();
+      pasteDelta.retain(start);
+      pasteDelta.delete(end - start);
       pasteDelta = pasteDelta.concat(data.delta!);
-    } else {
-      pasteDelta.insert(data.plainText!);
-    }
 
-    // Place the caret after the pasted content, derived from the paste delta
-    // itself rather than letting `compose` transform the controller's own
-    // selection — that selection may have been moved by the concurrent edit
-    // above, which would drop the caret at the wrong place.
-    controller.compose(pasteDelta,
-        selection: TextSelection.collapsed(
-            offset: pasteDelta.transformPosition(end, force: true)),
-        source: ChangeSource.local);
+      // Place the caret after the pasted content, derived from the paste
+      // delta itself rather than letting `compose` transform the
+      // controller's own selection — that selection may have been moved by
+      // the concurrent edit above, which would drop the caret at the wrong
+      // place.
+      controller.compose(pasteDelta,
+          selection: TextSelection.collapsed(
+              offset: pasteDelta.transformPosition(end, force: true)),
+          source: ChangeSource.local);
+    } else {
+      // Plain-text paste: replay it as a sequence of `replaceText` calls —
+      // the same shape the real typing/IME path uses (see
+      // editor_input_client_mixin.dart) — instead of composing one flat
+      // multi-line insert straight onto the document. A flat `compose` skips
+      // both the markdown autoformats (so pasted "## Heading" text never
+      // turns into a heading) and `LineNode.insert`'s single-newline
+      // heuristics, so a multi-line insert instead clones the *target*
+      // line's block style onto the split-off remainder before clearing it —
+      // leaking the block style (e.g. the app's default `{heading: 1}` first
+      // line) onto the last pasted line instead of the first. Splitting each
+      // heading marker off into its own single-space insert (the markdown
+      // autoformat only fires when the inserted data is exactly ' ') and
+      // inserting each line break on its own keeps every underlying
+      // `document.insert` call to at most one '\n', so the existing
+      // heuristics and markdown autoformats apply exactly as they do for
+      // typed input.
+      //
+      // Known limitation: this inherits `MarkdownLineShortcuts`' existing
+      // cursor-placement behavior for a heading marker applied in the middle
+      // of an otherwise non-empty line — it places the cursor at the end of
+      // that line's *pre-paste* content rather than right after the marker,
+      // the same as typing '# ' at the start of an existing non-empty line
+      // does today. Only pasting onto an empty line (e.g. the app's default
+      // `{heading: 1}` first line — the reported bug) is covered/tested.
+      if (end > start) {
+        controller.replaceText(start, end - start, '',
+            selection: TextSelection.collapsed(offset: start));
+      }
+      var caret = start;
+      final lines = data.plainText!.split('\n');
+      final headingMarker = RegExp(r'^(#{1,6})\s');
+      for (var i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        final match = headingMarker.firstMatch(line);
+        if (match != null) {
+          final marker = match.group(1)!;
+          controller.replaceText(caret, 0, marker,
+              selection:
+                  TextSelection.collapsed(offset: caret + marker.length));
+          caret += marker.length;
+          controller.replaceText(caret, 0, ' ',
+              selection: TextSelection.collapsed(offset: caret + 1));
+          caret = controller.selection.extentOffset;
+          final rest = line.substring(marker.length + 1);
+          if (rest.isNotEmpty) {
+            controller.replaceText(caret, 0, rest,
+                selection:
+                    TextSelection.collapsed(offset: caret + rest.length));
+            caret += rest.length;
+          }
+        } else if (line.isNotEmpty) {
+          controller.replaceText(caret, 0, line,
+              selection: TextSelection.collapsed(offset: caret + line.length));
+          caret += line.length;
+        }
+        if (i != lines.length - 1) {
+          controller.replaceText(caret, 0, '\n',
+              selection: TextSelection.collapsed(offset: caret + 1));
+          caret += 1;
+        }
+      }
+    }
 
     if (cause == SelectionChangedCause.toolbar) {
       SchedulerBinding.instance.addPostFrameCallback((_) {

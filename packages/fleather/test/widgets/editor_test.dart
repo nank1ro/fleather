@@ -778,6 +778,88 @@ void main() {
       await tester.pumpAndSettle(throttleDuration);
     });
 
+    testWidgets(
+        'Paste of multi-line markdown converts a leading heading marker and '
+        'does not leak the block style to the last pasted line (bug 1b)',
+        (tester) async {
+      prepareClipboard();
+      final data = FleatherClipboardData(plainText: '## Title\nbody');
+      final editor = EditorSandBox(
+        tester: tester,
+        // Mirrors the app's default empty first line, which always carries
+        // a heading attribute.
+        document: ParchmentDocument.fromJson([
+          {
+            'insert': '\n',
+            'attributes': {'heading': 1}
+          }
+        ]),
+        autofocus: true,
+        clipboardManager: FleatherCustomClipboardManager(
+          getData: () => Future.value(data),
+          setData: (_) => throw UnimplementedError(),
+        ),
+      );
+      await editor.pump();
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(editor.document.toPlainText(), 'Title\nbody\n');
+      // The "## " marker must be converted to a real h2 heading on the
+      // FIRST pasted line, not left as literal text and not leaked onto the
+      // second line.
+      expect(
+        editor.document.toDelta(),
+        Delta()
+          ..insert('Title')
+          ..insert('\n', {'heading': 2})
+          ..insert('body')
+          ..insert('\n'),
+      );
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets(
+        'Paste of plain multi-line text does not leak the target line\'s '
+        'block style to the last pasted line', (tester) async {
+      prepareClipboard();
+      final data = FleatherClipboardData(plainText: 'line1\nline2');
+      final editor = EditorSandBox(
+        tester: tester,
+        document: ParchmentDocument.fromJson([
+          {
+            'insert': '\n',
+            'attributes': {'heading': 1}
+          }
+        ]),
+        autofocus: true,
+        clipboardManager: FleatherCustomClipboardManager(
+          getData: () => Future.value(data),
+          setData: (_) => throw UnimplementedError(),
+        ),
+      );
+      await editor.pump();
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(editor.document.toPlainText(), 'line1\nline2\n');
+      // The original line's heading style must stay on the FIRST pasted
+      // line; the last pasted line must be a plain paragraph.
+      expect(
+        editor.document.toDelta(),
+        Delta()
+          ..insert('line1')
+          ..insert('\n', {'heading': 1})
+          ..insert('line2')
+          ..insert('\n'),
+      );
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
     group('Text selection', () {
       testWidgets('disabled selection interaction disables associated gestures',
           (tester) async {
