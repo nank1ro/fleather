@@ -860,6 +860,329 @@ void main() {
       await tester.pumpAndSettle(throttleDuration);
     });
 
+    // Rich (delta) paste: the clipboard delta is a *slice* of a document, so
+    // it can never carry the source document's final '\n'. Composing it raw
+    // merged the trailing segment into the target line and let it inherit the
+    // target's block style. These tests pin the line-by-line replay.
+    EditorSandBox richPasteSandbox(
+      WidgetTester tester, {
+      required List<dynamic> document,
+      required Delta clip,
+    }) {
+      prepareClipboard();
+      return EditorSandBox(
+        tester: tester,
+        document: ParchmentDocument.fromJson(document),
+        autofocus: true,
+        clipboardManager: FleatherCustomClipboardManager(
+          getData: () => Future.value(FleatherClipboardData(delta: clip)),
+          setData: (_) => throw UnimplementedError(),
+        ),
+      );
+    }
+
+    testWidgets(
+        'Rich paste of a slice does not leak the target line style onto the '
+        'trailing unterminated segment', (tester) async {
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {
+            'insert': '\n',
+            'attributes': {'heading': 1}
+          }
+        ],
+        clip: Delta()
+          ..insert('Header')
+          ..insert('\n', {'heading': 2})
+          ..insert('100 + 200'),
+      );
+      await editor.pump();
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(
+        editor.document.toDelta(),
+        Delta()
+          ..insert('Header')
+          ..insert('\n', {'heading': 2})
+          ..insert('100 + 200')
+          ..insert('\n'),
+      );
+      expect(editor.selection, const TextSelection.collapsed(offset: 16));
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets('Rich paste preserves each pasted line\'s heading level',
+        (tester) async {
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {'insert': '\n'}
+        ],
+        clip: Delta()
+          ..insert('One')
+          ..insert('\n', {'heading': 1})
+          ..insert('Two')
+          ..insert('\n')
+          ..insert('Three')
+          ..insert('\n', {'heading': 2}),
+      );
+      await editor.pump();
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(
+        editor.document.toDelta(),
+        Delta()
+          ..insert('One')
+          ..insert('\n', {'heading': 1})
+          ..insert('Two')
+          ..insert('\n')
+          ..insert('Three')
+          ..insert('\n', {'heading': 2})
+          ..insert('\n'),
+      );
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets('Rich paste preserves inline attributes', (tester) async {
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {'insert': '\n'}
+        ],
+        clip: Delta()
+          ..insert('plain ')
+          ..insert('bold', {'b': true})
+          ..insert(' ')
+          ..insert('italic', {'i': true, 'u': true}),
+      );
+      await editor.pump();
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(
+        editor.document.toDelta(),
+        Delta()
+          ..insert('plain ')
+          ..insert('bold', {'b': true})
+          ..insert(' ')
+          ..insert('italic', {'i': true, 'u': true})
+          ..insert('\n'),
+      );
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets(
+        'Rich paste mid-line does not hoist the clip line style onto the '
+        'target line\'s existing prefix', (tester) async {
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {'insert': 'abcdef\n'}
+        ],
+        clip: Delta()
+          ..insert('Title')
+          ..insert('\n', {'heading': 2})
+          ..insert('x'),
+      );
+      await editor.pump();
+      await editor.updateSelection(base: 3, extent: 3);
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(
+        editor.document.toDelta(),
+        Delta()..insert('abcTitle\nxdef\n'),
+      );
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets(
+        'Rich paste at the start of a non-empty line takes over the clip line '
+        'style', (tester) async {
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {'insert': 'abcdef\n'}
+        ],
+        clip: Delta()
+          ..insert('Title')
+          ..insert('\n', {'heading': 2}),
+      );
+      await editor.pump();
+      await editor.updateSelection(base: 0, extent: 0);
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(
+        editor.document.toDelta(),
+        Delta()
+          ..insert('Title')
+          ..insert('\n', {'heading': 2})
+          ..insert('abcdef\n'),
+      );
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets('Rich paste replaces a non-collapsed selection',
+        (tester) async {
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {'insert': 'Hello World!\n'}
+        ],
+        clip: Delta()
+          ..insert('a')
+          ..insert('\n', {'heading': 3})
+          ..insert('b'),
+      );
+      await editor.pump();
+      await editor.updateSelection(base: 6, extent: 11);
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(
+        editor.document.toDelta(),
+        Delta()..insert('Hello a\nb!\n'),
+      );
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets('Rich paste is byte-faithful and does not run autoformats',
+        (tester) async {
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {'insert': '\n'}
+        ],
+        clip: Delta()
+          ..insert('rate 5**2**')
+          ..insert('\n')
+          ..insert('next line here'),
+      );
+      await editor.pump();
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(
+        editor.document.toDelta(),
+        Delta()..insert('rate 5**2**\nnext line here\n'),
+      );
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets(
+        'Rich paste of a lone-space op does not trigger markdown '
+        'line shortcuts', (tester) async {
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {'insert': '\n'}
+        ],
+        clip: Delta()
+          ..insert('-', {'b': true})
+          ..insert(' ')
+          ..insert('item', {'b': true}),
+      );
+      await editor.pump();
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(
+        editor.document.toDelta(),
+        Delta()
+          ..insert('-', {'b': true})
+          ..insert(' ')
+          ..insert('item', {'b': true})
+          ..insert('\n'),
+      );
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    // Note: the clip carries the '\n' that terminates the line the block embed
+    // was copied from — a block embed cannot share a line with text, and a
+    // single `compose` applies no insert rules to force one in. Pasting a
+    // bare block embed mid-line therefore still yields an invalid line; that
+    // is a pre-existing limitation of the compose path, not something the
+    // slice fixups change.
+    testWidgets('Rich paste of a block embed preserves document order',
+        (tester) async {
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {'insert': 'abcdef\n'}
+        ],
+        clip: Delta()
+          ..insert('\n')
+          ..insert(BlockEmbed.horizontalRule.toJson())
+          ..insert('\n')
+          ..insert('after'),
+      );
+      await editor.pump();
+      await editor.updateSelection(base: 3, extent: 3);
+
+      await sendPasteIntent(tester);
+      expect(tester.takeException(), isNull);
+
+      expect(
+        editor.document.toDelta(),
+        Delta()
+          ..insert('abc\n')
+          ..insert(BlockEmbed.horizontalRule.toJson())
+          ..insert('\nafterdef\n'),
+      );
+      expect(editor.selection, const TextSelection.collapsed(offset: 11));
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
+    testWidgets('Rich paste of a large clip is not quadratic', (tester) async {
+      final clip = Delta();
+      for (var i = 0; i < 300; i++) {
+        clip
+          ..insert('line $i ')
+          ..insert('bold', {'b': true})
+          ..insert(' tail')
+          ..insert('\n', i.isEven ? {'heading': 2} : null);
+      }
+      final editor = richPasteSandbox(
+        tester,
+        document: [
+          {'insert': '\n'}
+        ],
+        clip: clip,
+      );
+      await editor.pump();
+
+      final stopwatch = Stopwatch()..start();
+      await sendPasteIntent(tester);
+      stopwatch.stop();
+      expect(tester.takeException(), isNull);
+
+      expect(editor.document.toPlainText().split('\n').length, 302);
+      expect(stopwatch.elapsed, lessThan(const Duration(seconds: 2)));
+
+      await tester.pumpAndSettle(throttleDuration);
+    });
+
     group('Text selection', () {
       testWidgets('disabled selection interaction disables associated gestures',
           (tester) async {

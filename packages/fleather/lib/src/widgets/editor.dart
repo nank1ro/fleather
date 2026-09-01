@@ -1347,20 +1347,65 @@ class RawEditorState extends EditorState
         math.max(selection.baseOffset, selection.extentOffset), maxOffset);
 
     if (data.hasDelta) {
+      final clip = data.delta!;
+      // The clipboard delta is a *slice* of a document (see
+      // [_setClipboardData]), so it can never carry the source document's
+      // final '\n'. A single raw `compose` is still the right primitive — one
+      // change event, no autoformats inventing markdown/links out of clip
+      // content, embeds passed through untouched, byte-faithful and O(clip) —
+      // but both ends of the slice merge into text the user never copied:
+      //
+      //  * a mid-line paste merges the clip's first line into the target
+      //    line's existing prefix, hoisting the clip's line style onto it;
+      //  * an unterminated final segment merges into the remainder of the
+      //    target line, so the remainder keeps the target's line style even
+      //    though a '\n' just started it (pasting into the app's default
+      //    empty `{heading: 1}` line turned the last pasted line into a
+      //    heading).
+      //
+      // Both are repaired after the compose with O(1) line-scope formats, so
+      // snapshot what the compose is about to overwrite first.
+      final pastesMidLine = controller.document.lookupLine(start).offset > 0;
+      final targetLineStyle = controller.document.collectStyle(start, 0);
+      final ops = clip.toList();
+      final clipHasLineBreak = ops
+          .any((op) => op.data is String && (op.data as String).contains('\n'));
+      final lastData = ops.isEmpty ? null : ops.last.data;
+      final clipIsUnterminated =
+          !(lastData is String && lastData.endsWith('\n'));
+
       Delta pasteDelta = Delta();
       pasteDelta.retain(start);
       pasteDelta.delete(end - start);
-      pasteDelta = pasteDelta.concat(data.delta!);
+      pasteDelta = pasteDelta.concat(clip);
 
       // Place the caret after the pasted content, derived from the paste
       // delta itself rather than letting `compose` transform the
       // controller's own selection — that selection may have been moved by
       // the concurrent edit above, which would drop the caret at the wrong
       // place.
+      final caret = pasteDelta.transformPosition(end, force: true);
       controller.compose(pasteDelta,
-          selection: TextSelection.collapsed(
-              offset: pasteDelta.transformPosition(end, force: true)),
+          selection: TextSelection.collapsed(offset: caret),
           source: ChangeSource.local);
+
+      if (pastesMidLine && clipHasLineBreak) {
+        // The prefix the user never copied keeps its own line style instead
+        // of inheriting the clip's first line.
+        _restoreLineStyle(start, targetLineStyle);
+      }
+      if (clipIsUnterminated && clipHasLineBreak) {
+        // The remainder line was just started by a pasted '\n', so reset it
+        // the way typing a newline would: mirror parchment's
+        // `PreserveLineFormatOnNewLineRule`, which carries every line
+        // attribute over to the new line except the heading.
+        final remainder = math.min(caret, controller.document.length - 1);
+        if (controller.document
+            .collectStyle(remainder, 0)
+            .contains(ParchmentAttribute.heading)) {
+          controller.formatText(remainder, 0, ParchmentAttribute.heading.unset);
+        }
+      }
     } else {
       // Plain-text paste: replay it as a sequence of `replaceText` calls —
       // the same shape the real typing/IME path uses (see
@@ -1432,6 +1477,23 @@ class RawEditorState extends EditorState
         }
       });
       hideToolbar();
+    }
+  }
+
+  /// Forces the line containing [offset] to carry exactly [style]'s
+  /// line-scoped attributes, dropping any the line picked up elsewhere.
+  void _restoreLineStyle(int offset, ParchmentStyle style) {
+    final actual = controller.document.collectStyle(offset, 0);
+    final wantedKeys = style.lineAttributes.map((a) => a.key).toSet();
+    for (final attribute in actual.lineAttributes) {
+      if (!wantedKeys.contains(attribute.key)) {
+        controller.formatText(offset, 0, attribute.unset);
+      }
+    }
+    for (final attribute in style.lineAttributes) {
+      if (!actual.containsSame(attribute)) {
+        controller.formatText(offset, 0, attribute);
+      }
     }
   }
 
