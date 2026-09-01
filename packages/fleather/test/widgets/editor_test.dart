@@ -2265,6 +2265,205 @@ void main() {
       });
 
       testWidgets(
+          'scrolls up to reveal the extent of a backward (upward) selection drag',
+          (tester) async {
+        final editorScrollController = ScrollController();
+        final focusNode = FocusNode();
+        final delta = Delta();
+        for (int i = 0; i < 30; i++) {
+          delta.insert('Test\n');
+        }
+        final controller =
+            FleatherController(document: ParchmentDocument.fromDelta(delta));
+        final widget = MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                const SizedBox(height: 500),
+                SizedBox(
+                  height: 100,
+                  child: FleatherEditor(
+                    focusNode: focusNode,
+                    controller: controller,
+                    scrollController: editorScrollController,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpWidget(widget);
+        focusNode.requestFocus();
+        await tester.pumpAndSettle();
+
+        editorScrollController
+            .jumpTo(editorScrollController.position.maxScrollExtent);
+        await tester.pump();
+        final scrolledOffset = editorScrollController.offset;
+        expect(scrolledOffset, greaterThan(0));
+
+        // Drag started near the bottom (baseOffset) and the live extent is
+        // now at the very top, off-screen: selection.extent should be
+        // revealed, not selection.end (the bottom anchor, already visible).
+        controller.updateSelection(
+            const TextSelection(baseOffset: 140, extentOffset: 0));
+        await tester.pumpAndSettle(throttleDuration);
+
+        expect(editorScrollController.offset, lessThan(scrolledOffset));
+        expect(editorScrollController.offset, 0.0);
+      });
+
+      testWidgets(
+          'scrolls down to reveal the extent of a forward (downward) selection drag',
+          (tester) async {
+        final editorScrollController = ScrollController();
+        final focusNode = FocusNode();
+        final delta = Delta();
+        for (int i = 0; i < 30; i++) {
+          delta.insert('Test\n');
+        }
+        final controller =
+            FleatherController(document: ParchmentDocument.fromDelta(delta));
+        final widget = MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                const SizedBox(height: 500),
+                SizedBox(
+                  height: 100,
+                  child: FleatherEditor(
+                    focusNode: focusNode,
+                    controller: controller,
+                    scrollController: editorScrollController,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+        await tester.pumpWidget(widget);
+        focusNode.requestFocus();
+        await tester.pumpAndSettle();
+        expect(editorScrollController.offset, 0.0);
+
+        // Drag started near the top (baseOffset) and the live extent is now
+        // near the bottom, off-screen: pins existing forward-selection
+        // behaviour (extent == end here, same endpoint as before the fix).
+        controller.updateSelection(
+            const TextSelection(baseOffset: 0, extentOffset: 140));
+        await tester.pumpAndSettle(throttleDuration);
+
+        expect(editorScrollController.offset, greaterThan(0));
+      });
+
+      testWidgets('mouse drag upward past the top scrolls the editor up',
+          (tester) async {
+        final editorScrollController = ScrollController();
+        final focusNode = FocusNode();
+        final delta = Delta();
+        for (int i = 0; i < 40; i++) {
+          delta.insert('Test line $i\n');
+        }
+        final controller =
+            FleatherController(document: ParchmentDocument.fromDelta(delta));
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                const SizedBox(height: 100),
+                SizedBox(
+                  height: 200,
+                  child: FleatherEditor(
+                    focusNode: focusNode,
+                    controller: controller,
+                    scrollController: editorScrollController,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ));
+        focusNode.requestFocus();
+        await tester.pumpAndSettle();
+
+        editorScrollController
+            .jumpTo(editorScrollController.position.maxScrollExtent);
+        await tester.pump();
+        final scrolledOffset = editorScrollController.offset;
+        expect(scrolledOffset, greaterThan(0));
+
+        final editorRect = tester.getRect(find.byType(FleatherEditor));
+        final gesture = await tester.startGesture(
+          Offset(editorRect.left + 20, editorRect.bottom - 10),
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        // Drag upward past the top of the viewport, holding there so the
+        // editor keeps revealing the moving end of the selection.
+        for (var i = 0; i < 60; i++) {
+          await gesture
+              .moveTo(Offset(editorRect.left + 20, editorRect.top - 20));
+          await tester.pumpAndSettle(throttleDuration);
+        }
+        await gesture.up();
+        await tester.pumpAndSettle(throttleDuration);
+
+        expect(controller.selection.baseOffset,
+            greaterThan(controller.selection.extentOffset));
+        expect(editorScrollController.offset, 0.0);
+      });
+
+      testWidgets('mouse drag downward past the bottom scrolls the editor down',
+          (tester) async {
+        final editorScrollController = ScrollController();
+        final focusNode = FocusNode();
+        final delta = Delta();
+        for (int i = 0; i < 40; i++) {
+          delta.insert('Test line $i\n');
+        }
+        final controller =
+            FleatherController(document: ParchmentDocument.fromDelta(delta));
+        await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: Column(
+              children: [
+                const SizedBox(height: 100),
+                SizedBox(
+                  height: 200,
+                  child: FleatherEditor(
+                    focusNode: focusNode,
+                    controller: controller,
+                    scrollController: editorScrollController,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ));
+        focusNode.requestFocus();
+        await tester.pumpAndSettle();
+        expect(editorScrollController.offset, 0.0);
+
+        final editorRect = tester.getRect(find.byType(FleatherEditor));
+        final gesture = await tester.startGesture(
+          Offset(editorRect.left + 20, editorRect.top + 10),
+          kind: PointerDeviceKind.mouse,
+        );
+        await tester.pump(const Duration(milliseconds: 100));
+        for (var i = 0; i < 12; i++) {
+          await gesture
+              .moveTo(Offset(editorRect.left + 20, editorRect.bottom + 20));
+          await tester.pumpAndSettle(throttleDuration);
+        }
+        await gesture.up();
+        await tester.pumpAndSettle(throttleDuration);
+
+        expect(controller.selection.extentOffset,
+            greaterThan(controller.selection.baseOffset));
+        expect(editorScrollController.offset, greaterThan(0));
+      });
+
+      testWidgets(
           'changes focus node when updating widget with internal focus node',
           (tester) async {
         final expFocus = FocusNode();

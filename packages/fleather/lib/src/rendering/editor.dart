@@ -348,16 +348,20 @@ class RenderEditor extends RenderEditableContainerBox
     // so that the caret is not too close to the edge of the viewport.
     final endpoints = getEndpointsForSelection(selection);
     // For a collapsed selection there's a single endpoint (the caret); for a
-    // range, reveal the extent (last) endpoint so navigating to an off-screen
-    // selection — e.g. a find match — scrolls it into view rather than bailing.
+    // range, reveal the extent endpoint so navigating to an off-screen
+    // selection — e.g. a find match, or the moving end of a selection drag —
+    // scrolls it into view rather than bailing. endpoints.first sits at
+    // selection.start and endpoints.last at selection.end, so for a backward
+    // selection (extent == start) that's endpoints.first; otherwise it's
+    // endpoints.last.
     final TextSelectionPoint endpoint;
-    final TextPosition caretPosition;
+    final TextPosition caretPosition = selection.extent;
     if (endpoints.length == 1) {
       endpoint = endpoints.single;
-      caretPosition = selection.extent;
+    } else if (selection.baseOffset > selection.extentOffset) {
+      endpoint = endpoints.first;
     } else {
       endpoint = endpoints.last;
-      caretPosition = TextPosition(offset: selection.end);
     }
     final child = childAtPosition(caretPosition);
     final childPosition = TextPosition(
@@ -517,16 +521,15 @@ class RenderEditor extends RenderEditableContainerBox
     final fromPosition = getPositionForOffset(from);
     final toPosition = to == null ? null : getPositionForOffset(to);
 
-    var baseOffset = fromPosition.offset;
-    var extentOffset = fromPosition.offset;
-    if (toPosition != null) {
-      baseOffset = math.min(fromPosition.offset, toPosition.offset);
-      extentOffset = math.max(fromPosition.offset, toPosition.offset);
-    }
-
+    // Do not normalize base/extent: `from` is the drag anchor and `to` the
+    // moving end, so a backward (upward/leftward) drag must produce a backward
+    // selection — matching Flutter's [RenderEditable.selectPositionAt]. Sorting
+    // them here made every drag look forward, so the extent could never be
+    // recognised as off-screen above the viewport and the editor would not
+    // scroll up while selecting upwards.
     final newSelection = TextSelection(
-      baseOffset: baseOffset,
-      extentOffset: extentOffset,
+      baseOffset: fromPosition.offset,
+      extentOffset: (toPosition ?? fromPosition).offset,
       affinity: fromPosition.affinity,
     );
 
