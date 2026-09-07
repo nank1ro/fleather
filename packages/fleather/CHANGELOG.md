@@ -1,3 +1,7 @@
+## 1.27.1
+
+- Remove unused internal text-boundary code and an unused history-throttle mode. Editing and undo/redo behavior is unchanged.
+
 ## 1.27.0
 
 * Upgrade to Flutter 3.44

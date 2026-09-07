@@ -436,34 +436,23 @@ typedef _Throttleable<T> = void Function(T currentArg);
 /// A function that has been throttled by [_throttle].
 typedef _Throttled<T> = Timer Function(T currentArg);
 
-/// Returns a _Throttled that will call through to the given function only a
-/// maximum of once per duration.
+/// Calls [function] with the most recent argument at the end of each window.
 ///
 /// Only works for functions that take exactly one argument and return void.
 _Throttled<T> _throttle<T>({
   required Duration duration,
   required _Throttleable<T> function,
-  // If true, calls at the start of the timer.
-  bool leadingEdge = false,
 }) {
   Timer? timer;
-  bool calledDuringTimer = false;
   late T arg;
 
   return (T currentArg) {
     arg = currentArg;
     if (timer != null) {
-      calledDuringTimer = true;
       return timer!;
     }
-    if (leadingEdge) {
-      function(arg);
-    }
-    calledDuringTimer = false;
     timer = Timer(duration, () {
-      if (!leadingEdge || calledDuringTimer) {
-        function(arg);
-      }
+      function(arg);
       timer = null;
     });
     return timer!;
