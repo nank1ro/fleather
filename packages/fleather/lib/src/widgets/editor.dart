@@ -2473,23 +2473,6 @@ abstract class _TextBoundary {
 
 // -----------------------------  Text Boundaries -----------------------------
 
-// TODO: Check whether to use it or remove it
-// ignore: unused_element
-class _CodeUnitBoundary extends _TextBoundary {
-  const _CodeUnitBoundary(this.textEditingValue);
-
-  @override
-  final TextEditingValue textEditingValue;
-
-  @override
-  TextPosition getLeadingTextBoundaryAt(TextPosition position) =>
-      TextPosition(offset: position.offset);
-
-  @override
-  TextPosition getTrailingTextBoundaryAt(TextPosition position) => TextPosition(
-      offset: math.min(position.offset + 1, textEditingValue.text.length));
-}
-
 // The word modifier generally removes the word boundaries around white spaces
 // (and newlines), IOW white spaces and some other punctuations are considered
 // a part of the next word in the search direction.
