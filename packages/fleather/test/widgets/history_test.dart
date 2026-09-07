@@ -26,6 +26,24 @@ Future<void> redo(WidgetTester tester) async {
 
 void main() {
   group('History stack', () {
+    test('selection after deleting text and clearing trailing formatting', () {
+      final change = Delta()
+        ..delete(6)
+        ..retain(1, {'fg': null});
+      expect(HistoryStack.selectionFromDelta(change),
+          const TextSelection(baseOffset: 0, extentOffset: 1));
+    });
+
+    test('selection after replacing text uses the resulting document offset', () {
+      final change = Delta()
+        ..retain(2)
+        ..delete(5)
+        ..retain(1, {'b': null})
+        ..insert('hi');
+      expect(HistoryStack.selectionFromDelta(change),
+          const TextSelection.collapsed(offset: 5));
+    });
+
     late HistoryStack stack;
 
     setUp(() {
