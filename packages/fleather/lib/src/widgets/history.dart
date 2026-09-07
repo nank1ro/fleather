@@ -2,7 +2,6 @@ import 'package:flutter/widgets.dart';
 import 'package:parchment/parchment.dart';
 
 import 'controller.dart';
-import '../util.dart';
 
 /// Provides undo/redo capabilities for text editing.
 ///
@@ -179,15 +178,13 @@ class HistoryStack {
     }
     int extentOffset = baseOffset;
     final lastOp = changeDelta.last;
-    // if change is a change in format, selection must cover the rest of the
-    // change
-    if (lastOp.isRetain && lastOp.attributes != null) {
-      extentOffset = changeDelta.textLength;
-    }
-    // if change is an insertion, cursor is set at the end of the insertion
-    if (lastOp.isInsert) {
-      baseOffset = changeDelta.textLength;
-      extentOffset = baseOffset;
+    // Selection offsets refer to the resulting document. Deleted text does
+    // not advance that cursor; subtracting it can produce negative offsets
+    // when a history change also restores formatting or inserts text.
+    if ((lastOp.isRetain && lastOp.attributes != null) || lastOp.isInsert) {
+      extentOffset = changeDelta.toList().fold<int>(
+          0, (offset, op) => offset + (op.isDelete ? 0 : op.length));
+      if (lastOp.isInsert) baseOffset = extentOffset;
     }
     return TextSelection(baseOffset: baseOffset, extentOffset: extentOffset);
   }

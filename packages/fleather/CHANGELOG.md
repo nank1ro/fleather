@@ -1,6 +1,7 @@
 ## 1.27.1
 
-- Remove unused internal text-boundary code and an unused history-throttle mode. Editing and undo/redo behavior is unchanged.
+- Remove unused internal text-boundary code and an unused history-throttle mode.
+- Fix undo/redo selection offsets when a change deletes text and restores formatting or inserts replacement text.
 
 ## 1.27.0
 
