@@ -1154,6 +1154,77 @@ void main() {
       await tester.pumpAndSettle(throttleDuration);
     });
 
+    group('Rich paste into a line with an answer override', () {
+      final document = [
+        {'insert': 'Intro\nTotal'},
+        {
+          'insert': '\n',
+          'attributes': {'nc-answer': 'A'}
+        },
+        {'insert': 'Tail\n'},
+      ];
+      final annotatedClip = Delta()
+        ..insert('x')
+        ..insert('\n', {'nc-answer': 'B'})
+        ..insert('y');
+
+      Future<EditorSandBox> paste(WidgetTester tester, int offset,
+          {Delta? clip}) async {
+        final editor = richPasteSandbox(tester,
+            document: document, clip: clip ?? annotatedClip);
+        await editor.pump();
+        await editor.updateSelection(base: offset, extent: offset);
+        await sendPasteIntent(tester);
+        expect(tester.takeException(), isNull);
+        return editor;
+      }
+
+      testWidgets('at the start', (tester) async {
+        final editor = await paste(tester, 6);
+        expect(answerLines(editor.document.toDelta()),
+            ['Intro', 'x', 'yTotal [A]', 'Tail']);
+        await tester.pumpAndSettle(throttleDuration);
+      });
+
+      testWidgets('in the middle', (tester) async {
+        final editor = await paste(tester, 9);
+        expect(answerLines(editor.document.toDelta()),
+            ['Intro', 'Totx', 'yal [A]', 'Tail']);
+        await tester.pumpAndSettle(throttleDuration);
+      });
+
+      testWidgets('at the end', (tester) async {
+        final editor = await paste(tester, 11);
+        expect(answerLines(editor.document.toDelta()),
+            ['Intro', 'Totalx [A]', 'y', 'Tail']);
+        await tester.pumpAndSettle(throttleDuration);
+      });
+
+      testWidgets('at the end, with a clip without overrides', (tester) async {
+        final editor =
+            await paste(tester, 11, clip: Delta()..insert('x\ny\nz'));
+        expect(answerLines(editor.document.toDelta()),
+            ['Intro', 'Totalx [A]', 'y', 'z', 'Tail']);
+        await tester.pumpAndSettle(throttleDuration);
+      });
+
+      testWidgets('is undone and redone as one step', (tester) async {
+        final editor = await paste(tester, 9);
+        await tester.pumpAndSettle(throttleDuration);
+
+        editor.controller.undo();
+        await tester.pump();
+        expect(answerLines(editor.document.toDelta()),
+            ['Intro', 'Total [A]', 'Tail']);
+
+        editor.controller.redo();
+        await tester.pump();
+        expect(answerLines(editor.document.toDelta()),
+            ['Intro', 'Totx', 'yal [A]', 'Tail']);
+        await tester.pumpAndSettle(throttleDuration);
+      });
+    });
+
     testWidgets('Rich paste of a large clip is not quadratic', (tester) async {
       final clip = Delta();
       for (var i = 0; i < 300; i++) {

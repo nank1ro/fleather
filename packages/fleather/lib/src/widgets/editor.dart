@@ -1367,6 +1367,7 @@ class RawEditorState extends EditorState
       // snapshot what the compose is about to overwrite first.
       final pastesMidLine = controller.document.lookupLine(start).offset > 0;
       final targetLineStyle = controller.document.collectStyle(start, 0);
+      final documentBeforePaste = controller.document.toDelta();
       final ops = clip.toList();
       final clipHasLineBreak = ops
           .any((op) => op.data is String && (op.data as String).contains('\n'));
@@ -1405,6 +1406,11 @@ class RawEditorState extends EditorState
             .contains(ParchmentAttribute.heading)) {
           controller.formatText(remainder, 0, ParchmentAttribute.heading.unset);
         }
+      }
+      // Runs last so the answer override ends up on exactly one line.
+      final answerFix = fixAnswerPlacement(documentBeforePaste, pasteDelta);
+      if (answerFix.isNotEmpty) {
+        controller.compose(answerFix, source: ChangeSource.local);
       }
     } else {
       // Plain-text paste: replay it as a sequence of `replaceText` calls —
@@ -1485,13 +1491,15 @@ class RawEditorState extends EditorState
   void _restoreLineStyle(int offset, ParchmentStyle style) {
     final actual = controller.document.collectStyle(offset, 0);
     final wantedKeys = style.lineAttributes.map((a) => a.key).toSet();
+    // The answer override is placed by [fixAnswerPlacement] instead.
+    final answerKey = ParchmentAttribute.answer.key;
     for (final attribute in actual.lineAttributes) {
-      if (!wantedKeys.contains(attribute.key)) {
+      if (attribute.key != answerKey && !wantedKeys.contains(attribute.key)) {
         controller.formatText(offset, 0, attribute.unset);
       }
     }
     for (final attribute in style.lineAttributes) {
-      if (!actual.containsSame(attribute)) {
+      if (attribute.key != answerKey && !actual.containsSame(attribute)) {
         controller.formatText(offset, 0, attribute);
       }
     }

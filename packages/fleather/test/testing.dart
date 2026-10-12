@@ -296,3 +296,26 @@ class FakeSpellCheckService implements SpellCheckService {
     return await (stub ?? (() => Future.value(null)))(locale, text);
   }
 }
+
+/// Describes every line of [doc] as its text, followed by ` [value]` when the
+/// line carries an `nc-answer` override. Block embeds show as `<hr>`.
+List<String> answerLines(Delta doc) {
+  final result = <String>[];
+  var text = StringBuffer();
+  for (final op in doc.toList()) {
+    final data = op.data;
+    if (data is! String) {
+      text.write('<hr>');
+      continue;
+    }
+    final parts = data.split('\n');
+    for (var i = 0; i < parts.length; i++) {
+      text.write(parts[i]);
+      if (i == parts.length - 1) break;
+      final answer = op.attributes?[ParchmentAttribute.answer.key];
+      result.add(answer == null ? '$text' : '$text [$answer]');
+      text = StringBuffer();
+    }
+  }
+  return result;
+}

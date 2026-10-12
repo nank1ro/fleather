@@ -4,6 +4,8 @@ import 'package:fleather/util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../testing.dart';
+
 void main() {
   group('$FleatherController', () {
     late FleatherController controller;
@@ -533,6 +535,119 @@ void main() {
             selection: const TextSelection.collapsed(offset: 0));
         expect(controller.document.toDelta(), Delta()..insert(':)\n'));
         expect(controller.selection, const TextSelection.collapsed(offset: 2));
+      });
+    });
+  });
+
+  group('Answer override placement', () {
+    FleatherController controllerFor(Delta delta) =>
+        FleatherController(document: ParchmentDocument.fromDelta(delta));
+
+    List<String> lines(FleatherController controller) =>
+        answerLines(controller.document.toDelta());
+
+    test('Enter at the end of a line, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Total')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('Tail\n'));
+        controller.replaceText(5, 0, '\n',
+            selection: const TextSelection.collapsed(offset: 6));
+        async.flushTimers();
+        expect(lines(controller), ['Total [A]', '', 'Tail']);
+        controller.undo();
+        expect(lines(controller), ['Total [A]', 'Tail']);
+        controller.redo();
+        expect(lines(controller), ['Total [A]', '', 'Tail']);
+      });
+    });
+
+    test('divider from the toolbar on an annotated line, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Total')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('Tail\n'));
+        controller.replaceText(5, 0, BlockEmbed.horizontalRule,
+            selection: const TextSelection.collapsed(offset: 7));
+        async.flushTimers();
+        expect(lines(controller), ['Total [A]', '<hr>', 'Tail']);
+        controller.undo();
+        expect(lines(controller), ['Total [A]', 'Tail']);
+        controller.redo();
+        expect(lines(controller), ['Total [A]', '<hr>', 'Tail']);
+      });
+    });
+
+    test('divider on an empty annotated line, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Intro\n')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('Tail\n'));
+        controller.replaceText(6, 0, BlockEmbed.horizontalRule,
+            selection: const TextSelection.collapsed(offset: 7));
+        async.flushTimers();
+        expect(lines(controller), ['Intro', '<hr>', 'Tail']);
+        controller.undo();
+        expect(lines(controller), ['Intro', ' [A]', 'Tail']);
+        controller.redo();
+        expect(lines(controller), ['Intro', '<hr>', 'Tail']);
+      });
+    });
+
+    test('deleting a line break between two empty lines, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Intro\n')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('\n', {'nc-answer': 'B'})
+          ..insert('Tail\n'));
+        controller.replaceText(6, 1, '',
+            selection: const TextSelection.collapsed(offset: 6));
+        async.flushTimers();
+        expect(lines(controller), ['Intro', ' [A]', 'Tail']);
+        controller.undo();
+        expect(lines(controller), ['Intro', ' [A]', ' [B]', 'Tail']);
+        controller.redo();
+        expect(lines(controller), ['Intro', ' [A]', 'Tail']);
+      });
+    });
+
+    test('Backspace at the start of an annotated line, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('abc\nTotal')
+          ..insert('\n', {'nc-answer': 'A'}));
+        controller.replaceText(3, 1, '',
+            selection: const TextSelection.collapsed(offset: 3));
+        async.flushTimers();
+        expect(lines(controller), ['abcTotal [A]']);
+        controller.undo();
+        expect(lines(controller), ['abc', 'Total [A]']);
+        controller.redo();
+        expect(lines(controller), ['abcTotal [A]']);
+      });
+    });
+
+    // A cut that starts mid-line keeps the lower line break, so the lower
+    // override survives, like every other line attribute.
+    test('cut across two annotated lines, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Top')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('Bottom')
+          ..insert('\n', {'nc-answer': 'C'}));
+        controller.replaceText(2, 5, '',
+            selection: const TextSelection.collapsed(offset: 2));
+        async.flushTimers();
+        expect(lines(controller), ['Totom [C]']);
+        controller.undo();
+        expect(lines(controller), ['Top [A]', 'Bottom [C]']);
+        controller.redo();
+        expect(lines(controller), ['Totom [C]']);
       });
     });
   });

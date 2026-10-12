@@ -1,5 +1,6 @@
 import 'package:parchment_delta/parchment_delta.dart';
 
+import '../document/attributes.dart';
 import 'utils.dart';
 
 /// A heuristic rule for delete operations.
@@ -52,11 +53,13 @@ class PreserveLineStyleOnMergeRule extends DeleteRule {
   @override
   Delta? apply(Delta document, int index, int length) {
     final iter = DeltaIterator(document);
-    iter.skip(index);
+    final before = iter.skip(index);
     final target = iter.next(1);
     if (target.data != '\n') return null;
 
     iter.skip(length - 1);
+    final upperIsEmpty = before == null ||
+        (before.data is String && (before.data as String).endsWith('\n'));
 
     if (!iter.hasNext) {
       // User attempts to delete the last newline character, prevent it.
@@ -70,18 +73,33 @@ class PreserveLineStyleOnMergeRule extends DeleteRule {
       ..delete(length);
 
     // Look for next newline to apply the attributes
+    var lowerIsEmpty = true;
     while (iter.hasNext) {
       final op = iter.next();
       final opText = op.data is String ? op.data as String : '';
       final lf = opText.indexOf('\n');
       if (lf == -1) {
         result.retain(op.length);
+        lowerIsEmpty = false;
         continue;
       }
+      if (lf > 0) lowerIsEmpty = false;
       var attributes = _unsetAttributes(op.attributes);
       if (target.isNotPlain) {
         attributes ??= <String, dynamic>{};
         attributes.addAll(target.attributes!);
+      }
+      // The answer override follows the line that survives with text: the
+      // upper line's when the lower line is empty, the lower line's when only
+      // the upper line is empty, otherwise the upper's falling back to the
+      // lower's.
+      final answerKey = ParchmentAttribute.answer.key;
+      if (!lowerIsEmpty &&
+          (upperIsEmpty || target.attributes?[answerKey] == null) &&
+          attributes != null &&
+          attributes.containsKey(answerKey)) {
+        attributes.remove(answerKey);
+        if (attributes.isEmpty) attributes = null;
       }
       result
         ..retain(lf)
