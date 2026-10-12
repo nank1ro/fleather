@@ -66,6 +66,40 @@ void main() {
       var act = stack.undo();
       expect(act, Delta()..retain(5, {'b': null}));
     });
+
+    test('keeps changes before the last line break of the document', () {
+      // Parchment cannot insert after the final line break, so a line added
+      // at the end must be recorded before it.
+      stack.push(Delta()..insert('Hello\n\n'));
+      expect(
+          stack.undo(),
+          Delta()
+            ..retain(5)
+            ..delete(1));
+      expect(
+          stack.redo(),
+          Delta()
+            ..retain(5)
+            ..insert('\n'));
+    });
+
+    test('records format changes of the last line break', () {
+      stack.push(Delta()
+        ..insert('Hello\nWorld')
+        ..insert('\n', {'heading': 1}));
+      expect(
+          stack.undo(),
+          Delta()
+            ..retain(5)
+            ..delete(6)
+            ..retain(1, {'heading': null}));
+      expect(
+          stack.redo(),
+          Delta()
+            ..retain(5)
+            ..insert('\nWorld')
+            ..retain(1, {'heading': 1}));
+    });
   });
 
   group('History widget', () {

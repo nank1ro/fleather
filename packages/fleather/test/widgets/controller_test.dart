@@ -405,6 +405,106 @@ void main() {
           expect(controller.canUndo, true);
         });
       });
+
+      group('line breaks at the end of the document', () {
+        // Types each [edit] (index, text) with the cursor after it, then
+        // undoes and redoes everything twice, checking each recorded state.
+        // When [throttled] is true all edits are merged into one history step.
+        void expectUndoRedo(Delta document, List<(int, String)> edits,
+            {bool throttled = false}) {
+          fakeAsync((async) {
+            controller = FleatherController(
+                document: ParchmentDocument.fromDelta(document));
+            controller.updateSelection(TextSelection.collapsed(
+                offset: controller.document.length - 1));
+            final states = [
+              (controller.document.toDelta(), controller.selection)
+            ];
+            for (final (index, data) in edits) {
+              controller.replaceText(index, 0, data,
+                  selection:
+                      TextSelection.collapsed(offset: index + data.length));
+              if (!throttled) {
+                async.flushTimers();
+                states
+                    .add((controller.document.toDelta(), controller.selection));
+              }
+            }
+            if (throttled) {
+              async.flushTimers();
+              states.add((controller.document.toDelta(), controller.selection));
+            }
+            for (var round = 0; round < 2; round++) {
+              for (var i = states.length - 2; i >= 0; i--) {
+                controller.undo();
+                expect(controller.document.toDelta(), states[i].$1);
+                expect(controller.selection, states[i].$2);
+              }
+              for (var i = 1; i < states.length; i++) {
+                controller.redo();
+                expect(controller.document.toDelta(), states[i].$1);
+                expect(controller.selection, states[i].$2);
+              }
+            }
+          });
+        }
+
+        test('Enter at the end', () {
+          expectUndoRedo(Delta()..insert('abc\n'), [(3, '\n')]);
+        });
+
+        test('Enter in an empty document', () {
+          expectUndoRedo(Delta()..insert('\n'), [(0, '\n')]);
+        });
+
+        test('Enter on an empty last line', () {
+          expectUndoRedo(Delta()..insert('abc\n\n'), [(4, '\n')]);
+        });
+
+        test('typing then Enter at the end', () {
+          expectUndoRedo(Delta()..insert('abc\n'), [(3, 'd'), (4, '\n')]);
+        });
+
+        test('Enter then typing at the end', () {
+          expectUndoRedo(Delta()..insert('abc\n'), [(3, '\n'), (4, 'x')]);
+        });
+
+        test('multiple Enters at the end', () {
+          expectUndoRedo(
+              Delta()..insert('abc\n'), [(3, '\n'), (4, '\n'), (5, '\n')]);
+        });
+
+        test('Enter at the end of a heading', () {
+          fakeAsync((async) {
+            final heading = Delta()
+              ..insert('abc')
+              ..insert('\n', {'heading': 1});
+            controller = FleatherController(
+                document: ParchmentDocument.fromDelta(heading));
+            controller.replaceText(3, 0, '\n',
+                selection: const TextSelection.collapsed(offset: 4));
+            async.flushTimers();
+            final twoLines = heading.concat(Delta()..insert('\n'));
+            expect(controller.document.toDelta(), twoLines);
+            for (var round = 0; round < 2; round++) {
+              controller.undo();
+              expect(controller.document.toDelta(), heading);
+              expect(controller.selection,
+                  const TextSelection.collapsed(offset: 3));
+              // The redo also removes the heading from the last line break,
+              // so its selection covers that line break.
+              controller.redo();
+              expect(controller.document.toDelta(), twoLines);
+            }
+          });
+        });
+
+        test('multiple Enters merged by the throttle', () {
+          expectUndoRedo(
+              Delta()..insert('abc\n'), [(3, '\n'), (4, '\n'), (5, '\n')],
+              throttled: true);
+        });
+      });
     });
 
     group('autoformats', () {
