@@ -91,7 +91,7 @@ class HistoryStack {
 
   /// Add a new document state change to the stack.
   void push(Delta newState) {
-    final redoDelta = _currentState.diff(newState);
+    final redoDelta = _diff(_currentState, newState);
 
     if (redoDelta.isEmpty) return;
 
@@ -115,6 +115,26 @@ class HistoryStack {
     _list.add(_Change(undoDelta, redoDelta));
     _currentIndex = _list.length - 1;
   }
+
+  /// Returns the change from document [oldState] to document [newState].
+  ///
+  /// Parchment cannot insert after the last line break of a document, but a
+  /// plain diff of "a\n" to "a\n\n" does exactly that. Diffing the documents
+  /// without their last line break keeps every insert before it; the last line
+  /// break itself can only change its attributes.
+  static Delta _diff(Delta oldState, Delta newState) {
+    final oldLength = _length(oldState) - 1;
+    final newLength = _length(newState) - 1;
+    final lastLineBreakDelta =
+        oldState.slice(oldLength).diff(newState.slice(newLength));
+    return oldState
+        .slice(0, oldLength)
+        .diff(newState.slice(0, newLength))
+        .compose((Delta()..retain(newLength)).concat(lastLineBreakDelta));
+  }
+
+  static int _length(Delta delta) =>
+      delta.toList().fold(0, (length, op) => length + op.length);
 
   /// Returns the current [_Change] to apply to current document to reach desired
   /// document state.
