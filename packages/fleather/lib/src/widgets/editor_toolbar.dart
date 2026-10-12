@@ -85,7 +85,7 @@ class UndoRedoButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-        animation: controller,
+        animation: Listenable.merge([controller, controller.historyState]),
         builder: (context, child) {
           final icon =
               _variant == _UndoRedoButtonVariant.undo ? Icons.undo : Icons.redo;

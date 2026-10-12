@@ -408,6 +408,115 @@ void main() {
         });
       });
 
+      group('historyState', () {
+        late int historyNotifications;
+        late int controllerNotifications;
+
+        void listen(FleatherController c) {
+          historyNotifications = 0;
+          controllerNotifications = 0;
+          c.historyState.addListener(() => historyNotifications++);
+          c.addListener(() => controllerNotifications++);
+        }
+
+        test('updates when the throttled snapshot of replaceText lands', () {
+          fakeAsync((async) {
+            listen(controller);
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            expect(historyNotifications, 0);
+            async.elapse(throttleDuration);
+            expect(
+                controller.historyState.value, (canUndo: true, canRedo: false));
+            expect(historyNotifications, 1);
+            expect(controllerNotifications, 1);
+          });
+        });
+
+        for (final notify in [true, false]) {
+          test('updates after formatText with notify: $notify', () {
+            fakeAsync((async) {
+              final c = FleatherController(
+                  document:
+                      ParchmentDocument.fromDelta(Delta()..insert('Hello\n')));
+              listen(c);
+              c.formatText(0, 5, ParchmentAttribute.bold, notify: notify);
+              async.elapse(throttleDuration);
+              expect(c.historyState.value, (canUndo: true, canRedo: false));
+              expect(historyNotifications, 1);
+              expect(controllerNotifications, notify ? 1 : 0);
+            });
+          });
+        }
+
+        test('does not notify when availability is unchanged', () {
+          fakeAsync((async) {
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            async.elapse(throttleDuration);
+            listen(controller);
+            controller.replaceText(5, 0, ' world',
+                selection: const TextSelection.collapsed(offset: 11));
+            async.elapse(throttleDuration);
+            expect(historyNotifications, 0);
+          });
+        });
+
+        test('updates on undo, redo and a new edit that clears redo', () {
+          fakeAsync((async) {
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            async.elapse(throttleDuration);
+            listen(controller);
+            controller.undo();
+            async.elapse(throttleDuration);
+            expect(
+                controller.historyState.value, (canUndo: false, canRedo: true));
+            expect(historyNotifications, 1);
+            controller.redo();
+            async.elapse(throttleDuration);
+            expect(
+                controller.historyState.value, (canUndo: true, canRedo: false));
+            expect(historyNotifications, 2);
+            controller.undo();
+            controller.replaceText(0, 0, 'Bye',
+                selection: const TextSelection.collapsed(offset: 3));
+            expect(
+                controller.historyState.value, (canUndo: false, canRedo: true));
+            async.elapse(throttleDuration);
+            expect(
+                controller.historyState.value, (canUndo: true, canRedo: false));
+            expect(historyNotifications, 4);
+          });
+        });
+
+        test('resets on clear', () {
+          fakeAsync((async) {
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            async.elapse(throttleDuration);
+            listen(controller);
+            controller.clear();
+            expect(controller.historyState.value,
+                (canUndo: false, canRedo: false));
+            expect(historyNotifications, 1);
+          });
+        });
+
+        test('is disposed with the controller', () {
+          fakeAsync((async) {
+            listen(controller);
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            controller.dispose();
+            async.elapse(throttleDuration);
+            expect(historyNotifications, 0);
+            expect(() => controller.historyState.addListener(() {}),
+                throwsFlutterError);
+          });
+        });
+      });
+
       group('line breaks at the end of the document', () {
         // Types each [edit] (index, text) with the cursor after it, then
         // undoes and redoes everything twice, checking each recorded state.
