@@ -98,6 +98,7 @@ class ParchmentAttribute<T> implements ParchmentAttributeBuilder<T> {
     ParchmentAttribute.direction.key: ParchmentAttribute.direction,
     ParchmentAttribute.alignment.key: ParchmentAttribute.alignment,
     ParchmentAttribute.indent.key: ParchmentAttribute.indent,
+    ParchmentAttribute.answer.key: ParchmentAttribute.answer,
   };
 
   // Inline attributes
@@ -196,6 +197,10 @@ class ParchmentAttribute<T> implements ParchmentAttributeBuilder<T> {
 
   /// Alias for [ParchmentAttribute.alignment.justify]
   static ParchmentAttribute<String> get justify => alignment.justify;
+
+  /// Notes Calculator answer override of a line, as an encoded JSON string.
+  /// Parchment only stores it; the app gives it meaning.
+  static const answer = AnswerAttributeBuilder._();
 
   static ParchmentAttribute _fromKeyValue(String key, dynamic value) {
     if (!_registry.containsKey(key)) {
@@ -623,6 +628,13 @@ class AlignmentAttributeBuilder extends ParchmentAttributeBuilder<String> {
 
   ParchmentAttribute<String> get justify =>
       ParchmentAttribute<String>._(key, scope, 'justify');
+}
+
+class AnswerAttributeBuilder extends ParchmentAttributeBuilder<String> {
+  static const _kAnswer = 'nc-answer';
+
+  const AnswerAttributeBuilder._()
+      : super._(_kAnswer, ParchmentAttributeScope.line);
 }
 
 const _maxIndentationLevel = 8;

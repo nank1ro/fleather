@@ -4,6 +4,8 @@ import 'package:fleather/util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../testing.dart';
+
 void main() {
   group('$FleatherController', () {
     late FleatherController controller;
@@ -406,6 +408,115 @@ void main() {
         });
       });
 
+      group('historyState', () {
+        late int historyNotifications;
+        late int controllerNotifications;
+
+        void listen(FleatherController c) {
+          historyNotifications = 0;
+          controllerNotifications = 0;
+          c.historyState.addListener(() => historyNotifications++);
+          c.addListener(() => controllerNotifications++);
+        }
+
+        test('updates when the throttled snapshot of replaceText lands', () {
+          fakeAsync((async) {
+            listen(controller);
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            expect(historyNotifications, 0);
+            async.elapse(throttleDuration);
+            expect(
+                controller.historyState.value, (canUndo: true, canRedo: false));
+            expect(historyNotifications, 1);
+            expect(controllerNotifications, 1);
+          });
+        });
+
+        for (final notify in [true, false]) {
+          test('updates after formatText with notify: $notify', () {
+            fakeAsync((async) {
+              final c = FleatherController(
+                  document:
+                      ParchmentDocument.fromDelta(Delta()..insert('Hello\n')));
+              listen(c);
+              c.formatText(0, 5, ParchmentAttribute.bold, notify: notify);
+              async.elapse(throttleDuration);
+              expect(c.historyState.value, (canUndo: true, canRedo: false));
+              expect(historyNotifications, 1);
+              expect(controllerNotifications, notify ? 1 : 0);
+            });
+          });
+        }
+
+        test('does not notify when availability is unchanged', () {
+          fakeAsync((async) {
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            async.elapse(throttleDuration);
+            listen(controller);
+            controller.replaceText(5, 0, ' world',
+                selection: const TextSelection.collapsed(offset: 11));
+            async.elapse(throttleDuration);
+            expect(historyNotifications, 0);
+          });
+        });
+
+        test('updates on undo, redo and a new edit that clears redo', () {
+          fakeAsync((async) {
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            async.elapse(throttleDuration);
+            listen(controller);
+            controller.undo();
+            async.elapse(throttleDuration);
+            expect(
+                controller.historyState.value, (canUndo: false, canRedo: true));
+            expect(historyNotifications, 1);
+            controller.redo();
+            async.elapse(throttleDuration);
+            expect(
+                controller.historyState.value, (canUndo: true, canRedo: false));
+            expect(historyNotifications, 2);
+            controller.undo();
+            controller.replaceText(0, 0, 'Bye',
+                selection: const TextSelection.collapsed(offset: 3));
+            expect(
+                controller.historyState.value, (canUndo: false, canRedo: true));
+            async.elapse(throttleDuration);
+            expect(
+                controller.historyState.value, (canUndo: true, canRedo: false));
+            expect(historyNotifications, 4);
+          });
+        });
+
+        test('resets on clear', () {
+          fakeAsync((async) {
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            async.elapse(throttleDuration);
+            listen(controller);
+            controller.clear();
+            expect(controller.historyState.value,
+                (canUndo: false, canRedo: false));
+            expect(historyNotifications, 1);
+          });
+        });
+
+        test('is disposed with the controller', () {
+          fakeAsync((async) {
+            listen(controller);
+            controller.replaceText(0, 0, 'Hello',
+                selection: const TextSelection.collapsed(offset: 5));
+            controller.dispose();
+            async.elapse(throttleDuration);
+            expect(historyNotifications, 0);
+            expect(() => controller.historyState.addListener(() {}),
+                throwsFlutterError);
+          });
+        });
+      });
+
       group('line breaks at the end of the document', () {
         // Types each [edit] (index, text) with the cursor after it, then
         // undoes and redoes everything twice, checking each recorded state.
@@ -633,6 +744,119 @@ void main() {
             selection: const TextSelection.collapsed(offset: 0));
         expect(controller.document.toDelta(), Delta()..insert(':)\n'));
         expect(controller.selection, const TextSelection.collapsed(offset: 2));
+      });
+    });
+  });
+
+  group('Answer override placement', () {
+    FleatherController controllerFor(Delta delta) =>
+        FleatherController(document: ParchmentDocument.fromDelta(delta));
+
+    List<String> lines(FleatherController controller) =>
+        answerLines(controller.document.toDelta());
+
+    test('Enter at the end of a line, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Total')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('Tail\n'));
+        controller.replaceText(5, 0, '\n',
+            selection: const TextSelection.collapsed(offset: 6));
+        async.flushTimers();
+        expect(lines(controller), ['Total [A]', '', 'Tail']);
+        controller.undo();
+        expect(lines(controller), ['Total [A]', 'Tail']);
+        controller.redo();
+        expect(lines(controller), ['Total [A]', '', 'Tail']);
+      });
+    });
+
+    test('divider from the toolbar on an annotated line, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Total')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('Tail\n'));
+        controller.replaceText(5, 0, BlockEmbed.horizontalRule,
+            selection: const TextSelection.collapsed(offset: 7));
+        async.flushTimers();
+        expect(lines(controller), ['Total [A]', '<hr>', 'Tail']);
+        controller.undo();
+        expect(lines(controller), ['Total [A]', 'Tail']);
+        controller.redo();
+        expect(lines(controller), ['Total [A]', '<hr>', 'Tail']);
+      });
+    });
+
+    test('divider on an empty annotated line, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Intro\n')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('Tail\n'));
+        controller.replaceText(6, 0, BlockEmbed.horizontalRule,
+            selection: const TextSelection.collapsed(offset: 7));
+        async.flushTimers();
+        expect(lines(controller), ['Intro', '<hr>', 'Tail']);
+        controller.undo();
+        expect(lines(controller), ['Intro', ' [A]', 'Tail']);
+        controller.redo();
+        expect(lines(controller), ['Intro', '<hr>', 'Tail']);
+      });
+    });
+
+    test('deleting a line break between two empty lines, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Intro\n')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('\n', {'nc-answer': 'B'})
+          ..insert('Tail\n'));
+        controller.replaceText(6, 1, '',
+            selection: const TextSelection.collapsed(offset: 6));
+        async.flushTimers();
+        expect(lines(controller), ['Intro', ' [A]', 'Tail']);
+        controller.undo();
+        expect(lines(controller), ['Intro', ' [A]', ' [B]', 'Tail']);
+        controller.redo();
+        expect(lines(controller), ['Intro', ' [A]', 'Tail']);
+      });
+    });
+
+    test('Backspace at the start of an annotated line, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('abc\nTotal')
+          ..insert('\n', {'nc-answer': 'A'}));
+        controller.replaceText(3, 1, '',
+            selection: const TextSelection.collapsed(offset: 3));
+        async.flushTimers();
+        expect(lines(controller), ['abcTotal [A]']);
+        controller.undo();
+        expect(lines(controller), ['abc', 'Total [A]']);
+        controller.redo();
+        expect(lines(controller), ['abcTotal [A]']);
+      });
+    });
+
+    // A cut that starts mid-line keeps the lower line break, so the lower
+    // override survives, like every other line attribute.
+    test('cut across two annotated lines, undo and redo', () {
+      fakeAsync((async) {
+        final controller = controllerFor(Delta()
+          ..insert('Top')
+          ..insert('\n', {'nc-answer': 'A'})
+          ..insert('Bottom')
+          ..insert('\n', {'nc-answer': 'C'}));
+        controller.replaceText(2, 5, '',
+            selection: const TextSelection.collapsed(offset: 2));
+        async.flushTimers();
+        expect(lines(controller), ['Totom [C]']);
+        controller.undo();
+        expect(lines(controller), ['Top [A]', 'Bottom [C]']);
+        controller.redo();
+        expect(lines(controller), ['Totom [C]']);
       });
     });
   });

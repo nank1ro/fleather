@@ -2,6 +2,7 @@ import 'package:parchment_delta/parchment_delta.dart';
 
 import 'document.dart';
 import 'document/attributes.dart';
+import 'heuristics/answer_placement.dart';
 import 'heuristics/delete_rules.dart';
 import 'heuristics/format_rules.dart';
 import 'heuristics/insert_rules.dart';
@@ -63,7 +64,11 @@ class ParchmentHeuristics {
     final delta = document.toDelta();
     for (var rule in insertRules) {
       final result = rule.apply(delta, index, data);
-      if (result != null) return result..trim();
+      if (result != null) {
+        result.trim();
+        final fix = fixAnswerPlacement(delta, result);
+        return fix.isEmpty ? result : (result.compose(fix)..trim());
+      }
     }
     throw StateError('Failed to apply insert heuristic rules: none applied.');
   }

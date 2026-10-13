@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:collection/collection.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:parchment/parchment.dart';
 
 import '../../util.dart';
@@ -30,7 +31,7 @@ class FleatherController extends ChangeNotifier {
         _selection = const TextSelection.collapsed(offset: 0) {
     _throttledPush = _throttle(
       duration: throttleDuration,
-      function: _history.push,
+      function: _pushHistory,
     );
   }
 
@@ -44,6 +45,16 @@ class FleatherController extends ChangeNotifier {
 
   late _Throttled<Delta> _throttledPush;
   Timer? _throttleTimer;
+
+  /// Whether undo and redo are currently available.
+  ///
+  /// Notifies only when [canUndo] or [canRedo] changes, including when a
+  /// throttled history snapshot lands after the edit that caused it. Listen to
+  /// this together with the controller to keep undo/redo UI up to date.
+  ValueListenable<({bool canUndo, bool canRedo})> get historyState =>
+      _historyState;
+  final _historyState = ValueNotifier<({bool canUndo, bool canRedo})>(
+      (canUndo: false, canRedo: false));
 
   // The auto format handler
   final AutoFormats _autoFormats;
@@ -306,6 +317,7 @@ class FleatherController extends ChangeNotifier {
   void dispose() {
     document.close();
     _throttleTimer?.cancel();
+    _historyState.dispose();
     super.dispose();
   }
 
@@ -355,9 +367,19 @@ class FleatherController extends ChangeNotifier {
     _history = HistoryStack.doc(document);
     _throttledPush = _throttle(
       duration: throttleDuration,
-      function: _history.push,
+      function: _pushHistory,
     );
+    _syncHistoryState();
     notifyListeners();
+  }
+
+  void _pushHistory(Delta state) {
+    _history.push(state);
+    _syncHistoryState();
+  }
+
+  void _syncHistoryState() {
+    _historyState.value = (canUndo: canUndo, canRedo: canRedo);
   }
 }
 
@@ -378,12 +400,14 @@ extension HistoryHandler on FleatherController {
   void undo() {
     _flushHistory();
     _update(_history.undo());
+    _syncHistoryState();
   }
 
   /// Sets current document state to it's next state, if any.
   void redo() {
     _flushHistory();
     _update(_history.redo());
+    _syncHistoryState();
   }
 
   /// Immediately records any throttled history snapshot that is still waiting
@@ -408,7 +432,7 @@ extension HistoryHandler on FleatherController {
     // re-arm it to reset that state — mirrors what `clear()` does.
     _throttledPush = _throttle(
       duration: throttleDuration,
-      function: _history.push,
+      function: _pushHistory,
     );
   }
 

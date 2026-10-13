@@ -1,4 +1,5 @@
 import 'package:fleather/fleather.dart';
+import 'package:fleather/src/widgets/checkbox.dart';
 import 'package:fleather/util.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -155,6 +156,30 @@ void main() {
       final editor = tester.state<RawEditorState>(find.byType(RawEditor));
       expect(editor.effectiveFocusNode.hasFocus, false);
       expect(editor.hasConnection, false);
+    });
+
+    testWidgets('Undo enabled after a check list toggle', (tester) async {
+      final controller = FleatherController(
+          document: ParchmentDocument.fromDelta(Delta()
+            ..insert('an item')
+            ..insert('\n', {'block': 'cl'})));
+      await tester.pumpWidget(widget(controller));
+      await tester.pumpAndSettle();
+      final rawUndoButton = find.descendant(
+          of: find.byType(UndoRedoButton).first,
+          matching: find.byType(FLIconButton));
+      expect(tester.widget<FLIconButton>(rawUndoButton).onPressed, isNull);
+
+      var controllerNotifications = 0;
+      controller.addListener(() => controllerNotifications++);
+      await tester.tap(find.byType(FleatherCheckbox));
+      await tester.pumpAndSettle(throttleDuration);
+
+      expect(controller.document.toDelta().last,
+          Operation.insert('\n', {'block': 'cl', 'checked': true}));
+      expect(tester.widget<FLIconButton>(rawUndoButton).onPressed, isNotNull);
+      // The editor only scrolls in response to controller notifications.
+      expect(controllerNotifications, 0);
     });
 
     testWidgets('Bold', (tester) async {
