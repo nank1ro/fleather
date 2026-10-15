@@ -88,14 +88,17 @@ class CursorPainter {
   Offset _getPixelPerfectCursorOffset(Rect caretRect) {
     final Offset caretPosition = editable.localToGlobal(caretRect.topLeft);
     final double pixelMultiple = 1.0 / devicePixelRatio;
+    // An editor kept alive off screen (a hidden tab) has no global position:
+    // its transform is all zeros, so localToGlobal gives NaN. There is
+    // nothing to snap to, and shifting the caret by NaN fails drawRRect.
     final double pixelPerfectOffsetX = caretPosition.dx.isFinite
         ? (caretPosition.dx / pixelMultiple).round() * pixelMultiple -
             caretPosition.dx
-        : caretPosition.dx;
+        : 0.0;
     final double pixelPerfectOffsetY = caretPosition.dy.isFinite
         ? (caretPosition.dy / pixelMultiple).round() * pixelMultiple -
             caretPosition.dy
-        : caretPosition.dy;
+        : 0.0;
     return Offset(pixelPerfectOffsetX, pixelPerfectOffsetY);
   }
 }
