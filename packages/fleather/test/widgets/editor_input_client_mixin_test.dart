@@ -386,6 +386,41 @@ void main() {
     expect(textInputSetClientProperties, isNull);
   });
 
+  // textcalc Sentry NOTES-CALCULATOR-EG: on web, `TextInput.updateConfig`
+  // force-unwraps the engine's input element, which is gone once the engine
+  // has stopped editing. Like EditableText, send it only when the view
+  // changes, not on every dependency change (a window resize sent one a
+  // frame).
+  testWidgets('a dependency change does not resend the input config',
+      (tester) async {
+    var updateConfigCalls = 0;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.textInput, (MethodCall methodCall) async {
+      if (methodCall.method == 'TextInput.updateConfig') updateConfigCalls++;
+      return null;
+    });
+    final red = ValueNotifier(false);
+    addTearDown(red.dispose);
+
+    final editor = EditorSandBox(
+      tester: tester,
+      appBuilder: (context, child) => ValueListenableBuilder(
+        valueListenable: red,
+        builder: (context, red, _) => Theme(
+            data: ThemeData(primaryColor: red ? Colors.red : Colors.blue),
+            child: child!),
+      ),
+    );
+    await editor.pumpAndTap();
+    expect(getInputClient().hasConnection, isTrue);
+
+    red.value = true;
+    await tester.pumpAndSettle();
+
+    expect(getInputClient().hasConnection, isTrue);
+    expect(updateConfigCalls, 0);
+  });
+
   group('guards against stale deltas (Sentry 132143638)', () {
     // Reproduces the crash: a native TextEditingDelta is computed by the
     // platform against a document snapshot, but before it arrives here
