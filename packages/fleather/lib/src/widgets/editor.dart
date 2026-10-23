@@ -1575,6 +1575,8 @@ class RawEditorState extends EditorState
     effectiveFocusNode.addListener(_handleFocusChanged);
   }
 
+  int? _lastViewId;
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -1589,7 +1591,14 @@ class RawEditorState extends EditorState
       _didAutoFocus = true;
     }
     performSpellCheck(widget.controller.plainTextEditingValue.text);
-    updateConnectionConfig();
+    // Like EditableText, only a new view changes the input config. On web,
+    // `updateConfig` throws once the engine has stopped editing, so sending
+    // it on every dependency change (theme, media query) crashed.
+    final viewId = this.viewId;
+    if (_lastViewId != null && viewId != _lastViewId) {
+      updateConnectionConfig();
+    }
+    _lastViewId = viewId;
   }
 
   @override
