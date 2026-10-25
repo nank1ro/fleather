@@ -477,6 +477,38 @@ void main() {
   });
 
   group('SelectorScope', () {
+    testWidgets('Closes once when two pointers go down outside it',
+        (tester) async {
+      final controller = FleatherController();
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [FleatherToolbar.basic(controller: controller)],
+          ),
+        ),
+      ));
+      await tester.tap(find.byType(SelectHeadingButton));
+      await tester.pump();
+      expect(find.byKey(const Key('heading_selector')), findsOneWidget);
+
+      // Both pointers land before the overlay is removed (multi-touch on
+      // mobile web), so the tap-outside callback runs twice.
+      final outside =
+          tester.getBottomRight(find.byType(Scaffold)) - const Offset(10, 10);
+      for (final pointer in [1, 2]) {
+        tester.binding.handlePointerEvent(
+            PointerDownEvent(pointer: pointer, position: outside));
+      }
+      for (final pointer in [1, 2]) {
+        tester.binding.handlePointerEvent(
+            PointerUpEvent(pointer: pointer, position: outside));
+      }
+      await tester.pumpAndSettle(throttleDuration);
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('heading_selector')), findsNothing);
+    });
+
     testWidgets('Correctly places the selector in a visible area of screen',
         (WidgetTester tester) async {
       const padding = EdgeInsets.all(32);
