@@ -1298,7 +1298,9 @@ class SelectorScopeState extends State<SelectorScope> {
           ),
           child: TapRegion(
             child: selector,
-            onTapOutside: (_) => completer.complete(null),
+            onTapOutside: (_) {
+              if (!completer.isCompleted) completer.complete(null);
+            },
           ),
         );
       },
