@@ -56,6 +56,32 @@ void main() {
       tester.view.viewInsets = FakeViewPadding.zero;
     });
 
+    // Sentry NOTES-CALCULATOR-EM: the selection overlay's scroll update asked
+    // for the endpoints of a range ending in a line that had no render box
+    // yet, right after an edit, and `extentChild!` threw.
+    testWidgets('endpoints of a selection ahead of the render tree',
+        (tester) async {
+      final controller = FleatherController(
+          document: ParchmentDocument.fromJson([
+        {'insert': 'one\ntwo\n'}
+      ]));
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(body: FleatherEditor(controller: controller))));
+      final renderEditor =
+          tester.state<EditorState>(find.byType(RawEditor)).renderEditor;
+
+      // The document gains a line; the render tree catches up next frame.
+      controller.document.insert(7, '\nthree');
+
+      for (final selection in const [
+        TextSelection(baseOffset: 1, extentOffset: 10),
+        TextSelection(baseOffset: 9, extentOffset: 11),
+      ]) {
+        expect(renderEditor.getEndpointsForSelection(selection), hasLength(1),
+            reason: '$selection');
+      }
+    });
+
     group('Cursor offset to text position', () {
       MaterialApp widgetWithPadding(
           FleatherController controller, EdgeInsetsGeometry padding) {
