@@ -364,11 +364,10 @@ class RenderEditor extends RenderEditableContainerBox
       endpoint = endpoints.last;
     }
     final child = childAtPosition(caretPosition);
-    final childPosition = TextPosition(
-        offset: caretPosition.offset - child.node.documentOffset);
-    final caretTop = endpoint.point.dy -
-        child.preferredLineHeight(childPosition) -
-        kMargin;
+    final childPosition =
+        TextPosition(offset: caretPosition.offset - child.node.documentOffset);
+    final caretTop =
+        endpoint.point.dy - child.preferredLineHeight(childPosition) - kMargin;
     final caretBottom = endpoint.point.dy + kMargin;
     final caretHeight = caretBottom - caretTop;
     double? dy;
@@ -408,15 +407,6 @@ class RenderEditor extends RenderEditableContainerBox
         }
         baseChild = childAfter(baseChild);
       }
-      assert(baseChild != null);
-
-      final baseParentData = baseChild!.parentData as BoxParentData;
-      final baseSelection =
-          localSelection(baseChild.node, selection, fromParent: true);
-      var basePoint = baseChild.getBaseEndpointForSelection(baseSelection);
-      basePoint = TextSelectionPoint(
-          basePoint.point + baseParentData.offset, basePoint.direction);
-
       final extentNode = node.lookup(selection.end).node;
       RenderEditableBox? extentChild = baseChild;
       while (extentChild != null) {
@@ -425,9 +415,23 @@ class RenderEditor extends RenderEditableContainerBox
         }
         extentChild = childAfter(extentChild);
       }
-      assert(extentChild != null);
+      // Right after an edit, the selection can reach a line that has no
+      // render box until the next layout, e.g. when the selection overlay
+      // updates for a scroll. Fall back to the caret at the extent, which
+      // [childAtPosition] can always place.
+      if (baseChild == null || extentChild == null) {
+        return getEndpointsForSelection(
+            TextSelection.collapsed(offset: selection.extentOffset));
+      }
 
-      final extentParentData = extentChild!.parentData as BoxParentData;
+      final baseParentData = baseChild.parentData as BoxParentData;
+      final baseSelection =
+          localSelection(baseChild.node, selection, fromParent: true);
+      var basePoint = baseChild.getBaseEndpointForSelection(baseSelection);
+      basePoint = TextSelectionPoint(
+          basePoint.point + baseParentData.offset, basePoint.direction);
+
+      final extentParentData = extentChild.parentData as BoxParentData;
       final extentSelection =
           localSelection(extentChild.node, selection, fromParent: true);
       var extentPoint =
