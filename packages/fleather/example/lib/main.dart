@@ -3,9 +3,8 @@ import 'dart:io';
 
 import 'package:fleather/fleather.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -20,9 +19,7 @@ class FleatherApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
         localizationsDelegates: const [
           FleatherLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate
+          ...GlobalMaterialLocalizations.delegates,
         ],
         supportedLocales: FleatherLocalizations.supportedLocales,
         debugShowCheckedModeBanner: false,

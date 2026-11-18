@@ -202,8 +202,9 @@ class HistoryStack {
     // not advance that cursor; subtracting it can produce negative offsets
     // when a history change also restores formatting or inserts text.
     if ((lastOp.isRetain && lastOp.attributes != null) || lastOp.isInsert) {
-      extentOffset = changeDelta.toList().fold<int>(
-          0, (offset, op) => offset + (op.isDelete ? 0 : op.length));
+      extentOffset = changeDelta
+          .toList()
+          .fold<int>(0, (offset, op) => offset + (op.isDelete ? 0 : op.length));
       if (lastOp.isInsert) baseOffset = extentOffset;
     }
     return TextSelection(baseOffset: baseOffset, extentOffset: extentOffset);
