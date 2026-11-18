@@ -1,6 +1,6 @@
 import 'package:fleather/fleather.dart';
 import 'package:fleather/src/widgets/editor_input_client_mixin.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -243,7 +243,8 @@ void main() {
       expect(editorState.currentTextEditingValue, updatedEditingValue);
     });
 
-    test('a TextEditingDeltaNonTextUpdate whose selection outlives a document '
+    test(
+        'a TextEditingDeltaNonTextUpdate whose selection outlives a document '
         'shrink does not crash (Sentry NOTES-CALCULATOR-CZ)', () {
       // The platform (macOS/IME) can send a non-text update whose
       // `selection.base` was computed against a stale, larger document

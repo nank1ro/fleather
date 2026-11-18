@@ -1,3 +1,8 @@
+## 2.0.0
+
+- Use the standalone `material_ui` and `cupertino_ui` packages instead of `package:flutter/material.dart` and `package:flutter/cupertino.dart`, which Flutter 3.50 deprecates. Requires Flutter 3.47 or later.
+- Breaking: apps must use `material_ui` too. Fleather now reads the theme and localizations from `material_ui` and `cupertino_ui`, and `FleatherField.decoration` takes the `InputDecoration` from `material_ui`.
+
 ## 1.27.2
 
 - Fix undo/redo selection offsets when a change deletes text and restores formatting or inserts replacement text.

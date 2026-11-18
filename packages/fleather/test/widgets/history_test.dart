@@ -1,6 +1,6 @@
 import 'package:fleather/fleather.dart';
 import 'package:fleather/src/widgets/history.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -34,7 +34,8 @@ void main() {
           const TextSelection(baseOffset: 0, extentOffset: 1));
     });
 
-    test('selection after replacing text uses the resulting document offset', () {
+    test('selection after replacing text uses the resulting document offset',
+        () {
       final change = Delta()
         ..retain(2)
         ..delete(5)

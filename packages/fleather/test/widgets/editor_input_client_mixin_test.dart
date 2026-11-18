@@ -1,6 +1,6 @@
 import 'package:fleather/fleather.dart';
 import 'package:fleather/src/widgets/editor_input_client_mixin.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -495,8 +495,7 @@ void main() {
       expect(capturedEditingStates.last['text'], 'Hello hi\n');
     });
 
-    testWidgets(
-        'clamps a delta whose range extends past the current document',
+    testWidgets('clamps a delta whose range extends past the current document',
         (tester) async {
       bind(tester);
       final document = ParchmentDocument.fromJson([

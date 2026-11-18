@@ -13,7 +13,7 @@
 import 'package:fleather/fleather.dart';
 import 'package:fleather/src/rendering/editable_text_block.dart';
 import 'package:fleather/src/rendering/editable_text_line.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'rendering_tools.dart';

@@ -1,7 +1,7 @@
 import 'package:fake_async/fake_async.dart';
 import 'package:fleather/fleather.dart';
 import 'package:fleather/util.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../testing.dart';
@@ -511,8 +511,10 @@ void main() {
             controller.dispose();
             async.elapse(throttleDuration);
             expect(historyNotifications, 0);
-            expect(() => controller.historyState.addListener(() {}),
-                throwsFlutterError);
+            expect(
+                () => controller.historyState.addListener(() {}),
+                throwsA(isA<StateError>().having((e) => e.message, 'message',
+                    contains('was used after being disposed'))));
           });
         });
       });
